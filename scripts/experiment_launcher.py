@@ -73,6 +73,18 @@ class ExperimentLauncherGUI:
                   command=self.open_sweep_gui,
                   style="Accent.TButton").pack(anchor=tk.W)
         
+        # Model Builder button
+        builder_frame = ttk.LabelFrame(tool_frame, text="Neural Network Builder", padding=15)
+        builder_frame.pack(fill=tk.X, pady=5)
+        
+        builder_desc = ttk.Label(builder_frame, 
+                                text="Build neural network architectures with an intuitive interface")
+        builder_desc.pack(anchor=tk.W, pady=(0, 10))
+        
+        ttk.Button(builder_frame, text="Open Model Builder", 
+                  command=self.open_model_builder,
+                  style="Accent.TButton").pack(anchor=tk.W)
+        
         # Quick Tests button
         tests_frame = ttk.LabelFrame(tool_frame, text="Quick Tests", padding=15)
         tests_frame.pack(fill=tk.X, pady=5)
@@ -150,6 +162,28 @@ class ExperimentLauncherGUI:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open Sweep GUI: {str(e)}")
             self.update_status("Error opening Sweep GUI")
+            
+    def open_model_builder(self):
+        """Open the neural network model builder GUI"""
+        try:
+            self.update_status("Opening Model Builder...")
+            
+            # Check if simple_model_builder_gui.py exists
+            builder_script = REPO_ROOT / "scripts" / "simple_model_builder_gui.py"
+            if not builder_script.exists():
+                messagebox.showerror("Error", f"Model Builder script not found: {builder_script}")
+                return
+                
+            # Launch model builder GUI
+            subprocess.Popen([sys.executable, str(builder_script)], 
+                           cwd=str(REPO_ROOT))
+            
+            self.update_status("Model Builder opened successfully")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open Model Builder: {str(e)}")
+            self.update_status("Error opening Model Builder")
+            
             
     def run_quick_tests(self):
         """Run quick tests"""
