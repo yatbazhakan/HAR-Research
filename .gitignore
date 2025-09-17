@@ -214,6 +214,9 @@ temp/
 tmp/
 *.tmp
 *.temp
+*.dat
+*.sh
+
 
 # OS generated files
 .DS_Store
