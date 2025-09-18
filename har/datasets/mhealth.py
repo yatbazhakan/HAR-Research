@@ -3,6 +3,9 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import List
+import torch
+from torch.utils.data import Dataset
+from .shards import NPZShardsDataset
 
 # MHEALTH: each file has columns (commonly 23): timestamp + multiple sensors + activity label.
 # We'll try a robust parse and select: chest acc (3), wrist gyro (3), ankle mag (3), ECG (1).
@@ -117,3 +120,32 @@ def load_mhealth_stream(root_dir: str, fs: int = 50, win_sec: float = 3.0, overl
             rec.update({"dataset":"mhealth","split":"all"})
             rows.append(rec)
     return pd.DataFrame(rows)
+
+
+class MHealthDataset(Dataset):
+    """
+    PyTorch Dataset class for MHEALTH data using preprocessed NPZ shards.
+    
+    This class wraps the NPZShardsDataset to provide a clean interface for
+    loading MHEALTH data from preprocessed shard files.
+    """
+    
+    def __init__(self, shards_glob: str, transform=None, split: str = "all"):
+        """
+        Initialize MHEALTH dataset.
+        
+        Args:
+            shards_glob: Glob pattern for NPZ shard files (e.g., "data/mhealth/*.npz")
+            transform: Optional NormStats object for normalization
+            split: Data split to use ("train", "test", "val", or "all")
+        """
+        self.shards_dataset = NPZShardsDataset(shards_glob, split, stats=transform)
+        self.transform = transform
+        
+    def __len__(self):
+        return len(self.shards_dataset)
+    
+    def __getitem__(self, idx):
+        # NPZShardsDataset already applies normalization internally
+        x, y = self.shards_dataset[idx]
+        return x, y

@@ -3,6 +3,9 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import Dict, Iterable, Tuple, List
+import torch
+from torch.utils.data import Dataset
+from .shards import NPZShardsDataset
 
 # PAMAP2 sampling: IMU ~100Hz, heart rate ~9Hz; timestamps in seconds.
 # We'll resample to 50Hz. Activity id 0 = "other/unknown".
@@ -105,3 +108,32 @@ def load_pamap2_stream(root_dir: str, win_sec: float = 3.0, overlap: float = 0.5
             })
             rows.append(rec)
     return pd.DataFrame(rows)
+
+
+class PAMAP2Dataset(Dataset):
+    """
+    PyTorch Dataset class for PAMAP2 data using preprocessed NPZ shards.
+    
+    This class wraps the NPZShardsDataset to provide a clean interface for
+    loading PAMAP2 data from preprocessed shard files.
+    """
+    
+    def __init__(self, shards_glob: str, transform=None, split: str = "all"):
+        """
+        Initialize PAMAP2 dataset.
+        
+        Args:
+            shards_glob: Glob pattern for NPZ shard files (e.g., "data/pamap2/*.npz")
+            transform: Optional NormStats object for normalization
+            split: Data split to use ("train", "test", "val", or "all")
+        """
+        self.shards_dataset = NPZShardsDataset(shards_glob, split, stats=transform)
+        self.transform = transform
+        
+    def __len__(self):
+        return len(self.shards_dataset)
+    
+    def __getitem__(self, idx):
+        # NPZShardsDataset already applies normalization internally
+        x, y = self.shards_dataset[idx]
+        return x, y

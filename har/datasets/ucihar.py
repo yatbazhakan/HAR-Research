@@ -22,6 +22,9 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import Dict, List, Tuple
+import torch
+from torch.utils.data import Dataset
+from .shards import NPZShardsDataset
 
 # CRITICAL: Data preprocessing parameters
 # We use the raw "Inertial Signals": body_acc_* and body_gyro_* (50 Hz, 2.56 s windows -> 128 samples)
@@ -136,3 +139,32 @@ def load_ucihar_windows(root_dir: str) -> pd.DataFrame:
                 "channels": ["acc_x","acc_y","acc_z","gyro_x","gyro_y","gyro_z"],  # Channel names
             })
     return pd.DataFrame(rows)
+
+
+class UCIHARDataset(Dataset):
+    """
+    PyTorch Dataset class for UCI-HAR data using preprocessed NPZ shards.
+    
+    This class wraps the NPZShardsDataset to provide a clean interface for
+    loading UCI-HAR data from preprocessed shard files.
+    """
+    
+    def __init__(self, shards_glob: str, transform=None, split: str = "all"):
+        """
+        Initialize UCI-HAR dataset.
+        
+        Args:
+            shards_glob: Glob pattern for NPZ shard files (e.g., "data/uci_har/*.npz")
+            transform: Optional NormStats object for normalization
+            split: Data split to use ("train", "test", "val", or "all")
+        """
+        self.shards_dataset = NPZShardsDataset(shards_glob, split, stats=transform)
+        self.transform = transform
+        
+    def __len__(self):
+        return len(self.shards_dataset)
+    
+    def __getitem__(self, idx):
+        # NPZShardsDataset already applies normalization internally
+        x, y = self.shards_dataset[idx]
+        return x, y

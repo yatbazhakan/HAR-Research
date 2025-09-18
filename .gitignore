@@ -130,6 +130,11 @@ dmypy.json
 
 # HAR Project Specific Exclusions
 
+# Entire data folder (all datasets)
+data/
+raw_data/
+datasets/
+
 # Raw datasets (downloaded)
 data/raw/
 raw_data/

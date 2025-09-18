@@ -97,6 +97,18 @@ class ExperimentLauncherGUI:
                   command=self.run_quick_tests,
                   style="Accent.TButton").pack(anchor=tk.W)
         
+        # Config-based Experiments button
+        config_frame = ttk.LabelFrame(tool_frame, text="Config-based Experiments", padding=15)
+        config_frame.pack(fill=tk.X, pady=5)
+        
+        config_desc = ttk.Label(config_frame, 
+                               text="Run experiments directly from YAML configuration files")
+        config_desc.pack(anchor=tk.W, pady=(0, 10))
+        
+        ttk.Button(config_frame, text="Run from Config", 
+                  command=self.run_from_config,
+                  style="Accent.TButton").pack(anchor=tk.W)
+        
         # Command Line Tools section
         cli_frame = ttk.LabelFrame(tool_frame, text="Command Line Tools", padding=15)
         cli_frame.pack(fill=tk.X, pady=5)
@@ -238,6 +250,27 @@ class ExperimentLauncherGUI:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open terminal: {str(e)}")
             self.update_status("Error opening terminal")
+            
+    def run_from_config(self):
+        """Run experiment from configuration file"""
+        try:
+            self.update_status("Opening config-based experiment runner...")
+            
+            # Check if config_experiment_gui.py exists
+            config_gui_script = REPO_ROOT / "scripts" / "config_experiment_gui.py"
+            if not config_gui_script.exists():
+                messagebox.showerror("Error", f"Config GUI script not found: {config_gui_script}")
+                return
+                
+            # Launch config GUI
+            subprocess.Popen([sys.executable, str(config_gui_script)], 
+                           cwd=str(REPO_ROOT))
+            
+            self.update_status("Config-based experiment runner opened")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open config runner: {str(e)}")
+            self.update_status("Error opening config runner")
             
     def view_scripts(self):
         """Open scripts directory in file explorer"""

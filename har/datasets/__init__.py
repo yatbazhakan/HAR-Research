@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Any, Dict
 
-from .ucihar import load_ucihar_windows
-from .pamap2 import load_pamap2_stream
-from .mhealth import load_mhealth_stream
+from .ucihar import load_ucihar_windows, UCIHARDataset
+from .pamap2 import load_pamap2_stream, PAMAP2Dataset
+from .mhealth import load_mhealth_stream, MHealthDataset
 
 def load_dataset(name: str, root_dir: str, **kwargs: Any):
     """
@@ -28,8 +28,11 @@ def load_dataset(name: str, root_dir: str, **kwargs: Any):
 __all__ = [
     "load_dataset",
     "load_ucihar_windows",
-    "load_pamap2_stream",
+    "load_pamap2_stream", 
     "load_mhealth_stream",
+    "UCIHARDataset",
+    "PAMAP2Dataset",
+    "MHealthDataset",
 ]
 
 
