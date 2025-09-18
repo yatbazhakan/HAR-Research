@@ -1,0 +1,100 @@
+# HAR Sweep Configuration Example
+# This config defines the hyperparameter search space for HAR experiments
+
+method: bayes  # Options: bayes, random, grid
+name: uci_har_cnn_tcn_sweep
+metric:
+  name: val/accuracy
+  goal: maximize
+
+# Early termination for efficiency
+early_terminate:
+  type: hyperband
+  min_iter: 10
+  eta: 2
+
+# Hyperparameter search space
+parameters:
+  # Model architecture
+  model:
+    values:
+      - cnn_tcn
+      - cnn_bilstm
+  
+  # Optimizer selection
+  optimizer:
+    values:
+      - Adam
+      - SGD
+      - AdamW
+  
+  # Learning rate (log-uniform distribution)
+  lr:
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 0.1
+  
+  # Batch size (discrete values)
+  batch_size:
+    values:
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+  
+  # Number of training epochs
+  epochs:
+    values:
+      - 50
+      - 100
+      - 150
+      - 200
+  
+  # Dropout rate (uniform distribution)
+  dropout:
+    distribution: uniform
+    min: 0.0
+    max: 0.5
+  
+  # Weight decay (log-uniform distribution)
+  weight_decay:
+    distribution: log_uniform_values
+    min: 1e-6
+    max: 1e-2
+  
+  # Cross-validation type
+  cv_type:
+    values:
+      - holdout
+      - kfold
+  
+  # For Adam optimizer
+  betas_0:
+    distribution: uniform
+    min: 0.8
+    max: 0.95
+    conditions:
+      optimizer: Adam
+  
+  betas_1:
+    distribution: uniform
+    min: 0.95
+    max: 0.999
+    conditions:
+      optimizer: Adam
+  
+  # For SGD optimizer
+  momentum:
+    distribution: uniform
+    min: 0.0
+    max: 0.9
+    conditions:
+      optimizer: SGD
+  
+  nesterov:
+    values:
+      - true
+      - false
+    conditions:
+      optimizer: SGD

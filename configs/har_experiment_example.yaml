@@ -1,0 +1,184 @@
+# HAR Experiment Configuration Example
+# This config demonstrates the structure for running HAR experiments directly from config files
+# Similar to the introspection config but focused on HAR training and sweeps
+
+experiment_name: uci_har_cnn_tcn_experiment
+experiment_path: ./
+device: cuda:0
+method: har_training
+verbose: True
+
+# HAR Experiment Configuration
+har_experiment:
+  experiment_name: uci_har_cnn_tcn_training
+  wandb:
+    is_sweep: False
+    sweep_configuration:
+      method: bayes
+      name: uci_har_cnn_tcn_sweep
+      metric:
+        name: val/accuracy
+        goal: maximize
+      parameters:
+        model:
+          values:
+          - cnn_tcn
+          - cnn_bilstm
+        optimizer:
+          values:
+          - Adam
+          - SGD
+        lr:
+          values:
+          - 0.001
+          - 0.01
+          - 0.1
+        batch_size:
+          values:
+          - 32
+          - 64
+          - 128
+        epochs:
+          values:
+          - 50
+          - 100
+          - 200
+        dropout:
+          values:
+          - 0.1
+          - 0.3
+          - 0.5
+    project: har-experiments
+    entity: your_entity
+    mode: online
+    name: uci_har_cnn_tcn_experiment
+  
+  verbose: True
+  method:
+    task: multiclass
+    clip_grad: 1.0
+    log_grads: True
+    cross_validation:
+      type: holdout  # Options: holdout, kfold, loso, fold_json
+      iteration: 1
+      balanced: false
+      train_test_split: 0.2
+      validation_split: 0.1
+    processing:
+      active: True
+      method: normalize
+      stack: True
+      params:
+        stats_file: artifacts/norm_stats/uci_har.json
+    
+    # Model configuration
+    model:
+      name: cnn_tcn  # Options: cnn_tcn, cnn_bilstm
+      config_file: configs/har_cnn_tcn.yaml  # Optional: path to model config
+      dropout: 0.1
+      weight_decay: 0.001
+    
+    # Optimizer configuration
+    optimizer:
+      type: Adam  # Options: Adam, SGD, AdamW
+      params: 
+        lr: 0.001
+        weight_decay: 0.001
+        betas: [0.9, 0.999]  # For Adam
+    
+    # Loss function configuration
+    criterion:
+      type: CrossEntropyLoss  # Options: CrossEntropyLoss, FocalLoss
+      params:
+        reduction: mean
+        weight: null  # Optional: class weights
+    
+    # Learning rate scheduler
+    scheduler:
+      type: ReduceLROnPlateau  # Options: ReduceLROnPlateau, StepLR, CosineAnnealingLR
+      params:
+        patience: 10
+        factor: 0.5
+        min_lr: 1e-6
+    
+    # Training parameters
+    epochs: 100
+    log_interval: 10
+    save_interval: 10
+    early_stop: 20
+    sanity_check: false
+    save_path: artifacts/checkpoints
+    save_name: uci_har_cnn_tcn
+    
+    # Mixed precision training
+    amp: false
+    
+    # Calibration
+    calibrate: true
+  
+  device: cuda:0
+  
+  # Dataset configuration
+  dataset:
+    name: uci_har  # Options: uci_har, pamap2, mhealth
+    config:
+      shards_glob: artifacts/preprocessed/uci_har/*.npz
+      stats_file: artifacts/norm_stats/uci_har.json
+      class_names: ["Walking", "Upstairs", "Downstairs", "Sitting", "Standing", "Laying"]
+      num_classes: 6
+      input_shape: [6, 128]  # [channels, time_steps]
+      
+  # DataLoader configuration
+  dataloader:
+    all:
+      batch_size: 64
+      shuffle: True
+      num_workers: 4
+      pin_memory: True
+    train:
+      batch_size: 64
+      shuffle: True
+      num_workers: 4
+      pin_memory: True
+    val:
+      batch_size: 64
+      shuffle: False
+      num_workers: 4
+      pin_memory: True
+    test:
+      batch_size: 1
+      shuffle: False
+      num_workers: 4
+      pin_memory: True
+  
+  # Cross-validation specific settings
+  cross_validation:
+    type: holdout  # Options: holdout, kfold, loso, fold_json
+    params:
+      # For holdout
+      test_ratio: 0.2
+      val_ratio: 0.1
+      random_seed: 42
+      
+      # For kfold
+      k_folds: 5
+      fold_index: 0
+      
+      # For loso
+      subject_field: subject_id
+      
+      # For fold_json
+      fold_file: artifacts/folds/uci_har/loso_fold_0.json
+  
+  # Evaluation and plotting
+  evaluation:
+    metrics: ["accuracy", "f1", "precision", "recall", "confusion_matrix"]
+    plot_dir: artifacts/plots
+    save_predictions: true
+    predictions_file: artifacts/predictions/uci_har_predictions.csv
+  
+  # Operation type
+  operation: 
+    type: traineval  # Options: traineval, train_only, eval_only
+    load_model: False
+    model_path: null  # Path to load pretrained model
