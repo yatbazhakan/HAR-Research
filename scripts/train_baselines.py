@@ -1,3 +1,24 @@
+"""
+CRITICAL: Main Training Script for HAR Baseline Models
+
+This script is the primary entry point for training Human Activity Recognition models.
+It handles the complete training pipeline including data loading, model training,
+evaluation, and result visualization.
+
+Key Features:
+- Supports multiple model architectures (CNN-TCN, CNN-BiLSTM)
+- Multiple cross-validation strategies (holdout, k-fold, LOSO)
+- Comprehensive evaluation metrics and visualization
+- Weights & Biases integration for experiment tracking
+- Model calibration and uncertainty estimation
+
+Usage:
+    python scripts/train_baselines.py --dataset uci_har --model cnn_tcn --cv holdout
+
+CRITICAL: This script expects preprocessed data in NPZ shard format.
+Run preprocessing scripts first to generate the required data files.
+"""
+
 from __future__ import annotations
 import argparse, json, sys, glob, math
 from pathlib import Path
@@ -5,45 +26,55 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-# repo path
+# CRITICAL: Add repository root to Python path for imports
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from har.datasets.shards import NPZShardsDataset
-from har.transforms.stats_io import load_stats
-from har.models.cnn_tcn import CNN_TCN
-from har.models.cnn_bilstm import CNN_BiLSTM
-from har.train.metrics import TemperatureScaler
+# CRITICAL: Import core HAR modules
+from har.datasets.shards import NPZShardsDataset  # Dataset loading
+from har.transforms.stats_io import load_stats    # Normalization statistics
+from har.models.cnn_tcn import CNN_TCN           # CNN-TCN model
+from har.models.cnn_bilstm import CNN_BiLSTM     # CNN-BiLSTM model
+from har.train.metrics import TemperatureScaler  # Model calibration
+
+# CRITICAL: Optional imports with graceful fallbacks
+# These libraries enhance functionality but are not strictly required
 
 try:
     import wandb  # type: ignore
+    # Weights & Biases for experiment tracking and visualization
 except Exception:
     wandb = None
 
 try:
     import torchmetrics  # type: ignore
     from torchmetrics.classification import (
-        MulticlassAccuracy,
-        MulticlassF1Score,
-        MulticlassPrecision,
-        MulticlassRecall,
-        MulticlassAUROC,
-        MulticlassCalibrationError,
-        MulticlassConfusionMatrix,
+        MulticlassAccuracy,      # Multi-class accuracy metric
+        MulticlassF1Score,       # F1 score for multi-class
+        MulticlassPrecision,     # Precision for multi-class
+        MulticlassRecall,        # Recall for multi-class
+        MulticlassAUROC,         # Area Under ROC Curve
+        MulticlassCalibrationError,  # Calibration error metric
+        MulticlassConfusionMatrix,   # Confusion matrix
     )
+    # CRITICAL: torchmetrics provides efficient, GPU-accelerated metrics
 except Exception:
     torchmetrics = None
+
 try:
     from tqdm import tqdm  # type: ignore
+    # Progress bars for training loops
 except Exception:
     tqdm = None
+
 try:
     import matplotlib.pyplot as plt  # type: ignore
     import seaborn as sns  # type: ignore
     from sklearn.metrics import precision_recall_curve, roc_curve, auc
     from sklearn.calibration import calibration_curve
     has_matplotlib = True
+    # CRITICAL: Visualization libraries for plots and charts
 except Exception:
     has_matplotlib = False
     plt = None
@@ -80,43 +111,109 @@ def evaluate(model, loader, device):
 
 
 def main():
+    """
+    CRITICAL: Main training function for HAR baseline models
+    
+    This function orchestrates the entire training pipeline:
+    1. Parse command-line arguments
+    2. Set up device and optimization settings
+    3. Load and preprocess data
+    4. Create model and training components
+    5. Train the model
+    6. Evaluate and visualize results
+    
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    # CRITICAL: Command-line argument parsing
+    # These arguments control all aspects of the training process
     ap = argparse.ArgumentParser()
-    ap.add_argument("--shards_glob", type=str, required=True)
-    ap.add_argument("--fold_json", type=str, default="", help="LOSO JSON; if empty, use --cv mode")
-    ap.add_argument("--stats", type=str, required=True)
-    ap.add_argument("--model", type=str, choices=["cnn_tcn", "cnn_bilstm"], default="cnn_tcn")
-    ap.add_argument("--epochs", type=int, default=10)
-    ap.add_argument("--batch_size", type=int, default=128)
-    ap.add_argument("--lr", type=float, default=1e-3)
-    ap.add_argument("--calibrate", action="store_true")
-    ap.add_argument("--wandb", action="store_true")
-    ap.add_argument("--wandb_project", type=str, default="har-baselines")
-    ap.add_argument("--wandb_run", type=str, default="")
-    # CV options
-    ap.add_argument("--cv", type=str, choices=["fold_json", "holdout", "kfold"], default="fold_json")
-    ap.add_argument("--holdout_test_ratio", type=float, default=0.2)
-    ap.add_argument("--holdout_val_ratio", type=float, default=0.1)
-    ap.add_argument("--kfold_k", type=int, default=5)
-    ap.add_argument("--kfold_idx", type=int, default=0)
-    ap.add_argument("--num_workers", type=int, default=4)
-    ap.add_argument("--amp", action="store_true", help="enable mixed precision on CUDA")
-    ap.add_argument("--plot_dir", type=str, default="artifacts/plots", help="directory to save plots")
-    ap.add_argument("--class_names", type=str, default="", help="comma-separated class names (optional)")
+    
+    # CRITICAL: Data loading arguments
+    ap.add_argument("--shards_glob", type=str, required=True, 
+                   help="Glob pattern for NPZ shard files (e.g., 'data/*.npz')")
+    ap.add_argument("--fold_json", type=str, default="", 
+                   help="LOSO JSON file path; if empty, use --cv mode")
+    ap.add_argument("--stats", type=str, required=True,
+                   help="Path to normalization statistics JSON file")
+    
+    # CRITICAL: Model configuration
+    ap.add_argument("--model", type=str, choices=["cnn_tcn", "cnn_bilstm"], default="cnn_tcn",
+                   help="Model architecture to train")
+    ap.add_argument("--epochs", type=int, default=10,
+                   help="Number of training epochs")
+    ap.add_argument("--batch_size", type=int, default=128,
+                   help="Training batch size")
+    ap.add_argument("--lr", type=float, default=1e-3,
+                   help="Learning rate for optimizer")
+    
+    # CRITICAL: Training options
+    ap.add_argument("--calibrate", action="store_true",
+                   help="Enable temperature scaling for model calibration")
+    ap.add_argument("--amp", action="store_true", 
+                   help="Enable mixed precision training on CUDA")
+    ap.add_argument("--num_workers", type=int, default=4,
+                   help="Number of data loading workers")
+    
+    # CRITICAL: Experiment tracking
+    ap.add_argument("--wandb", action="store_true",
+                   help="Enable Weights & Biases logging")
+    ap.add_argument("--wandb_project", type=str, default="har-baselines",
+                   help="W&B project name")
+    ap.add_argument("--wandb_run", type=str, default="",
+                   help="W&B run name (auto-generated if empty)")
+    
+    # CRITICAL: Cross-validation options
+    ap.add_argument("--cv", type=str, choices=["fold_json", "holdout", "kfold"], default="fold_json",
+                   help="Cross-validation strategy")
+    ap.add_argument("--holdout_test_ratio", type=float, default=0.2,
+                   help="Test set ratio for holdout CV")
+    ap.add_argument("--holdout_val_ratio", type=float, default=0.1,
+                   help="Validation set ratio for holdout CV")
+    ap.add_argument("--kfold_k", type=int, default=5,
+                   help="Number of folds for k-fold CV")
+    ap.add_argument("--kfold_idx", type=int, default=0,
+                   help="Fold index to use for k-fold CV")
+    
+    # CRITICAL: Output options
+    ap.add_argument("--plot_dir", type=str, default="artifacts/plots",
+                   help="Directory to save evaluation plots")
+    ap.add_argument("--class_names", type=str, default="",
+                   help="Comma-separated class names for visualization")
+    
     args = ap.parse_args()
 
+    # CRITICAL: Device setup and optimization
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device.type == "cuda":
+        # CRITICAL: Enable cuDNN optimizations for better performance
         torch.backends.cudnn.benchmark = True
         try:
+            # CRITICAL: Use high precision for matrix multiplications (PyTorch 2.0+)
             torch.set_float32_matmul_precision("high")
         except Exception:
             pass
     print(f"Using device: {device}")
 
+    # CRITICAL: Load normalization statistics
+    # These are computed during preprocessing and are essential for proper data scaling
     stats = load_stats(args.stats)
     fold = None
-    # Build a global index over shards to support holdout/kfold
+    
+    # CRITICAL: Build global index over all shard files
+    # This enables flexible cross-validation strategies (holdout, k-fold, LOSO)
     def build_entries(shards_glob: str):
+        """
+        CRITICAL: Build index of all data samples across shard files
+        
+        This function creates a global index that maps each sample to its location
+        in the shard files. This is essential for cross-validation as it allows
+        us to split data at the sample level rather than the file level.
+        
+        Returns:
+            entries: List of (file_path, sample_index) tuples
+            labels: Array of corresponding labels
+        """
         files = sorted(glob.glob(shards_glob))
         entries = []
         labels = []
@@ -125,9 +222,10 @@ def main():
             y = z["y"].astype(int)
             n = y.shape[0]
             for j in range(n):
-                entries.append((f, j))
+                entries.append((f, j))  # (file_path, sample_index)
                 labels.append(int(y[j]))
         return entries, np.array(labels, dtype=np.int64)
+    
     entries, labels_all = build_entries(args.shards_glob)
 
     train_ds = NPZShardsDataset(args.shards_glob, split="all", stats=None)

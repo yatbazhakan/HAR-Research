@@ -144,7 +144,7 @@ class ExperimentConfigGUI:
         cv_frame.pack(fill=tk.X, pady=5)
         
         self.create_field(cv_frame, "cv", "CV Mode", "holdout", 0, 
-                         combobox_values=["fold_json", "holdout", "kfold"])
+                         combobox_values=["fold_json", "holdout", "kfold", "loso"])
         self.create_fold_field(cv_frame, "fold_json", "Fold JSON Path", "", 1)
         self.create_field(cv_frame, "holdout_test_ratio", "Holdout Test Ratio", "0.2", 2, field_type="float")
         self.create_field(cv_frame, "holdout_val_ratio", "Holdout Val Ratio", "0.1", 3, field_type="float")

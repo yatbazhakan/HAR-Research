@@ -191,7 +191,7 @@ class TrainingConfigGUI:
         
         # CV method
         self.create_field(cv_frame, "cv", "CV Method", "fold_json", 0,
-                         combobox_values=["fold_json", "holdout", "kfold"])
+                         combobox_values=["fold_json", "holdout", "kfold", "loso"])
         
         # Holdout ratio
         self.create_field(cv_frame, "holdout_ratio", "Holdout Ratio", "0.2", 1, "float")

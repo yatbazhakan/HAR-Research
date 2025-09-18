@@ -174,7 +174,7 @@ class SweepConfigGUI:
         
         # CV method
         self.create_field(base_frame, "cv", "CV Method", "fold_json", 6,
-                         combobox_values=["fold_json", "holdout", "kfold"])
+                         combobox_values=["fold_json", "holdout", "kfold", "loso"])
         
         # WandB project
         self.create_field(base_frame, "wandb_project", "WandB Project", "har-sweeps", 7)
@@ -546,15 +546,28 @@ class SweepConfigGUI:
                 
             # Run sweep
             cmd = [
-                "python", "scripts/run_sweep_new.py",
+                "python", "scripts/run_sweep.py",
                 "--action", "run",
                 "--config", str(base_config_file),
                 "--project", self.base_config["wandb_project"],
-                "--count", self.sweep_config["sweep_count"]
+                "--count", str(self.sweep_config["sweep_count"])
             ]
             
-            if self.sweep_config["sweep_id"]:
-                cmd.extend(["--sweep_id", self.sweep_config["sweep_id"]])
+            # Add sweep config file
+            if self.sweep_config_file_var.get():
+                cmd.extend(["--sweep_config", self.sweep_config_file_var.get()])
+            
+            # Add sweep_id if provided
+            sweep_id = self.sweep_id_var.get().strip()
+            if sweep_id:
+                cmd.extend(["--sweep_id", sweep_id])
+            else:
+                # If no sweep_id provided, we need to create a sweep first
+                self.log_message("ERROR: --sweep_id is required for run action.")
+                self.log_message("Please either:")
+                self.log_message("1. Create a new sweep first using the 'Create Sweep' button, or")
+                self.log_message("2. Enter an existing sweep ID in the 'Sweep ID' field")
+                return
                 
             self.log_message("Starting sweep...")
             self.log_message(f"Command: {' '.join(cmd)}")
@@ -585,6 +598,15 @@ class SweepConfigGUI:
                 
             process.wait()
             self.log_message(f"Sweep completed with exit code: {process.returncode}")
+            
+            if process.returncode != 0:
+                self.log_message("")
+                self.log_message("TROUBLESHOOTING:")
+                self.log_message("1. Make sure you're logged into W&B: wandb login")
+                self.log_message("2. Check if the project exists in your W&B dashboard")
+                self.log_message("3. Try creating the project manually in W&B first")
+                self.log_message("4. Or use a different project name")
+                self.log_message("5. Verify the sweep_id exists in the specified project")
             
         except Exception as e:
             self.log_message(f"ERROR in sweep thread: {str(e)}")
@@ -682,6 +704,24 @@ class SweepConfigGUI:
                 for key, value in config.items():
                     if hasattr(self, f"{key}_var"):
                         getattr(self, f"{key}_var").set(value)
+                
+                # Handle special cases for sweep configuration
+                if "sweep_id" in config:
+                    self.sweep_id_var.set(config["sweep_id"])
+                if "method" in config:
+                    self.method_var.set(config["method"])
+                if "metric" in config:
+                    self.metric_var.set(config["metric"])
+                if "goal" in config:
+                    self.goal_var.set(config["goal"])
+                
+                # Set default values for missing required fields
+                if not self.method_var.get():
+                    self.method_var.set("bayes")
+                if not self.metric_var.get():
+                    self.metric_var.set("val/accuracy")
+                if not self.goal_var.get():
+                    self.goal_var.set("maximize")
                         
                 self.sweep_config_file_var.set(filename)
                 self.log_message(f"Loaded sweep configuration from {filename}")

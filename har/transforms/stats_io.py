@@ -1,9 +1,10 @@
 import json
 import numpy as np
 from pathlib import Path
+from typing import Union
 from .normalize import NormStats
 
-def save_stats(stats: NormStats, path: str | Path):
+def save_stats(stats: NormStats, path: Union[str, Path]):
     path = Path(path)
     obj = {"mean": stats.mean.tolist(), "std": stats.std.tolist()}
     path.parent.mkdir(parents=True, exist_ok=True)

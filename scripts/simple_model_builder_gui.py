@@ -1,7 +1,31 @@
 #!/usr/bin/env python3
 """
-Simple Neural Network Builder GUI
-A user-friendly interface for building PyTorch models without drag-and-drop complexity.
+CRITICAL: Neural Network Model Builder GUI
+
+This is a comprehensive GUI tool for building and configuring neural network models
+for Human Activity Recognition (HAR) tasks. It provides an intuitive interface for:
+
+Key Features:
+- Visual model architecture design
+- Layer-by-layer parameter configuration
+- Real-time model statistics and validation
+- PyTorch code generation
+- Model testing and export capabilities
+- Support for custom HAR modules and PyTorch layers
+
+Architecture:
+- Left Panel: Layer management (add, edit, remove, reorder layers)
+- Right Panel: Generated PyTorch code and model statistics
+- Bottom: Control buttons for testing, saving, and exporting
+
+CRITICAL: This GUI is essential for:
+1. Rapid prototyping of HAR models
+2. Educational purposes (understanding model architectures)
+3. Experimentation with different layer combinations
+4. Generating production-ready PyTorch code
+
+Usage:
+    python scripts/simple_model_builder_gui.py
 """
 
 import tkinter as tk
@@ -12,31 +36,52 @@ import torch.nn as nn
 import sys
 import os
 
-# Add the project root to the path
+# CRITICAL: Add project root to Python path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# CRITICAL: Import the model configuration builder
 from har.models.model_config_builder import ModelConfigBuilder
 
 
 class SimpleModelBuilderGUI:
+    """
+    CRITICAL: Main GUI class for the Neural Network Model Builder
+    
+    This class manages the entire GUI application including:
+    - Model configuration state management
+    - Layer management (add, edit, remove, reorder)
+    - Real-time code generation and validation
+    - Model statistics calculation
+    - User interaction handling
+    
+    The GUI maintains a model_config dictionary that represents the current
+    model architecture. This configuration is used to:
+    1. Generate PyTorch code
+    2. Calculate model statistics
+    3. Test model functionality
+    4. Export model configurations
+    """
     def __init__(self, root):
         self.root = root
-        self.root.title("Advanced Neural Network Builder")
-        self.root.geometry("1400x900")
-        self.root.minsize(1200, 800)
+        self.root.title("Neural Network Builder - Professional Interface")
+        self.root.geometry("1400x800")
+        self.root.minsize(1200, 700)
         
-        # Initialize model builder
+        # CRITICAL: Initialize model configuration builder
+        # This handles the actual model creation and validation
         self.builder = ModelConfigBuilder()
         
-        # Model configuration
+        # CRITICAL: Model configuration state
+        # This dictionary represents the current model architecture
         self.model_config = {
-            "name": "custom_model",
-            "input_shape": [1, 9, 128],  # [batch, features, sequence_length]
-            "num_classes": 6,
-            "layers": []
+            "name": "custom_model",                    # Model name
+            "input_shape": [1, 9, 128],               # [batch, features, sequence_length]
+            "num_classes": 6,                         # Number of output classes
+            "layers": []                              # List of layer configurations
         }
         
-        # Layer counter for unique IDs
+        # CRITICAL: Layer counter for unique IDs
+        # Ensures each layer has a unique identifier
         self.layer_counter = 0
         
         # Configure modern styling
@@ -116,20 +161,71 @@ class SimpleModelBuilderGUI:
         self.resize_original_height = None
         self.layer_tree.configure(cursor="")
         
+    def on_layer_double_click(self, event):
+        """Handle double-click on layer to edit parameters"""
+        self.edit_layer()
+        
     def create_widgets(self):
         """Create the main GUI layout"""
+        # Create main canvas and scrollbar for scrolling
+        canvas = tk.Canvas(self.root)
+        scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Pack canvas and scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Bind mousewheel to canvas
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # Store canvas reference for cleanup
+        self.canvas = canvas
+        
+        # Cleanup function
+        def cleanup():
+            try:
+                canvas.unbind_all("<MouseWheel>")
+            except:
+                pass
+            self.root.destroy()
+        self.root.protocol("WM_DELETE_WINDOW", cleanup)
+        
         # Main container
-        main_frame = ttk.Frame(self.root)
+        main_frame = ttk.Frame(scrollable_frame)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Top section - Model info
         self.create_model_info_section(main_frame)
         
-        # Middle section - Layer management
-        self.create_layer_management_section(main_frame)
+        # Two-column layout for the rest
+        content_frame = ttk.Frame(main_frame)
+        content_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
         
-        # Bottom section - Code output and controls
-        self.create_code_section(main_frame)
+        # Left column - Layer management
+        left_frame = ttk.Frame(content_frame)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        
+        # Right column - Code output
+        right_frame = ttk.Frame(content_frame)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+        
+        # Create sections in their respective frames
+        self.create_layer_management_section(left_frame)
+        self.create_code_section(right_frame)
+        
+        # Status bar
+        self.create_status_bar(scrollable_frame)
         
     def create_model_info_section(self, parent):
         """Create model information section"""
@@ -168,15 +264,21 @@ class SimpleModelBuilderGUI:
         self.stats_text = tk.Text(stats_frame, height=8, width=60, font=('Consolas', 9), 
                                  state=tk.DISABLED, wrap=tk.WORD)
         self.stats_text.pack(fill=tk.BOTH, expand=True)
+    
+    def create_status_bar(self, parent):
+        """Create status bar with instructions"""
+        status_frame = ttk.Frame(parent)
+        status_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        status_text = "Layer Management: Select a layer and use buttons below to Edit, Remove, Move Up ↑, or Move Down ↓"
+        ttk.Label(status_frame, text=status_text, font=('Arial', 9), 
+                 foreground='#7f8c8d').pack(anchor=tk.W)
         
     def create_layer_management_section(self, parent):
         """Create layer management section"""
-        layer_frame = ttk.LabelFrame(parent, text="Layer Management")
-        layer_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-        
-        # Left side - Add layer controls
-        add_frame = ttk.Frame(layer_frame)
-        add_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(5, 10), pady=5)
+        # Add layer section (top row)
+        add_frame = ttk.LabelFrame(parent, text="Add New Layer")
+        add_frame.pack(fill=tk.X, pady=(0, 10))
         
         ttk.Label(add_frame, text="Add New Layer:", font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(0, 5))
         
@@ -196,14 +298,16 @@ class SimpleModelBuilderGUI:
         # Bind layer type change
         self.layer_type_combo.bind('<<ComboboxSelected>>', self.on_layer_type_change)
         
+        # Initialize parameters for the first layer type
+        self.on_layer_type_change()
+        
         # Add layer button
-        ttk.Button(add_frame, text="Add Layer", command=self.add_layer).pack(fill=tk.X, pady=5)
+        ttk.Button(add_frame, text="Add Layer", command=self.add_layer, 
+                  style='Success.TButton').pack(fill=tk.X, pady=5)
         
-        # Right side - Layer list
-        list_frame = ttk.Frame(layer_frame)
-        list_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(0, 5), pady=5)
-        
-        ttk.Label(list_frame, text="Model Layers:", font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(0, 5))
+        # Layer list section (bottom row)
+        list_frame = ttk.LabelFrame(parent, text="Model Layers")
+        list_frame.pack(fill=tk.BOTH, expand=True)
         
         # Layer list with treeview for better display
         list_container = ttk.Frame(list_frame)
@@ -211,7 +315,7 @@ class SimpleModelBuilderGUI:
         
         # Create treeview for layers
         columns = ('Index', 'Type', 'Parameters', 'Output Shape')
-        self.layer_tree = ttk.Treeview(list_container, columns=columns, show='headings', height=15)
+        self.layer_tree = ttk.Treeview(list_container, columns=columns, show='headings', height=8)
         
         # Configure columns
         self.layer_tree.heading('Index', text='#')
@@ -225,7 +329,7 @@ class SimpleModelBuilderGUI:
         self.layer_tree.column('Output Shape', width=100, minwidth=80)
         
         # Make row heights adjustable
-        self.layer_tree.configure(height=15)
+        self.layer_tree.configure(height=8)
         
         # Scrollbars
         v_scrollbar = ttk.Scrollbar(list_container, orient=tk.VERTICAL, command=self.layer_tree.yview)
@@ -240,22 +344,31 @@ class SimpleModelBuilderGUI:
         # Enable row resizing
         self.enable_row_resizing()
         
+        # Enable double-click to edit layers
+        self.layer_tree.bind('<Double-1>', self.on_layer_double_click)
+        
         # Layer control buttons
         button_frame = ttk.Frame(list_frame)
         button_frame.pack(fill=tk.X, pady=(5, 0))
         
-        ttk.Button(button_frame, text="Edit Layer", command=self.edit_layer).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(button_frame, text="Remove Layer", command=self.remove_layer).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(button_frame, text="Move Up", command=self.move_layer_up).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(button_frame, text="Move Down", command=self.move_layer_down).pack(side=tk.LEFT)
+        # Make buttons more prominent
+        ttk.Button(button_frame, text="Edit Layer", command=self.edit_layer, 
+                  style='Primary.TButton').pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="Remove Layer", command=self.remove_layer, 
+                  style='Danger.TButton').pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="Move Up ↑", command=self.move_layer_up, 
+                  style='Success.TButton').pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="Move Down ↓", command=self.move_layer_down, 
+                  style='Success.TButton').pack(side=tk.LEFT, padx=(0, 5))
         
     def create_code_section(self, parent):
         """Create code output and control section"""
-        code_frame = ttk.LabelFrame(parent, text="Generated PyTorch Code")
+        code_frame = ttk.LabelFrame(parent, text="Generated PyTorch Code (Editable)")
         code_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Code text area
-        self.code_text = tk.Text(code_frame, height=15, wrap=tk.WORD, font=("Consolas", 9))
+        # Code text area - make it editable
+        self.code_text = tk.Text(code_frame, height=15, wrap=tk.WORD, font=("Consolas", 9), 
+                                bg='#f8f9fa', fg='#2c3e50')
         code_scrollbar = ttk.Scrollbar(code_frame, orient=tk.VERTICAL, command=self.code_text.yview)
         self.code_text.configure(yscrollcommand=code_scrollbar.set)
         
@@ -264,12 +377,14 @@ class SimpleModelBuilderGUI:
         
         # Control buttons
         control_frame = ttk.Frame(parent)
-        control_frame.pack(fill=tk.X, pady=(5, 0))
+        control_frame.pack(fill=tk.X, pady=(10, 0))
         
-        ttk.Button(control_frame, text="Test Model", command=self.test_model).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(control_frame, text="Test Model", command=self.test_model, 
+                  style='Success.TButton').pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(control_frame, text="Save Config", command=self.save_config).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(control_frame, text="Load Config", command=self.load_config).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(control_frame, text="Clear All", command=self.clear_all).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(control_frame, text="Clear All", command=self.clear_all, 
+                  style='Danger.TButton').pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(control_frame, text="Copy Code", command=self.copy_code).pack(side=tk.LEFT)
         
     def populate_layer_types(self):
@@ -424,47 +539,75 @@ class SimpleModelBuilderGUI:
         return params.get(layer_name, {})
     
     def add_layer(self):
-        """Add a new layer to the model"""
+        """
+        CRITICAL: Add a new layer to the current model configuration
+        
+        This method handles the complete process of adding a layer:
+        1. Validates that a layer type is selected
+        2. Extracts the actual layer name from the selection
+        3. Collects and validates all layer parameters
+        4. Creates a layer configuration dictionary
+        5. Adds the layer to the model configuration
+        6. Updates the GUI display and statistics
+        
+        The layer configuration follows this structure:
+        {
+            'id': unique_integer_id,
+            'layer_type': 'LayerName',
+            'config': {param_name: param_value, ...}
+        }
+        """
+        # CRITICAL: Validate layer type selection
         layer_type = self.layer_type_var.get()
         if not layer_type:
             messagebox.showerror("Error", "Please select a layer type")
             return
             
-        # Extract actual layer name
+        # CRITICAL: Extract actual layer name from formatted string
+        # Format: "Category: LayerName" -> "LayerName"
         if ":" in layer_type:
             actual_layer_name = layer_type.split(":", 1)[1].strip()
         else:
             actual_layer_name = layer_type
             
-        # Get parameters
+        # CRITICAL: Validate that parameters have been configured
+        if not hasattr(self, 'param_vars'):
+            messagebox.showerror("Error", "Please select a layer type first to configure parameters")
+            return
+            
+        # CRITICAL: Collect and validate layer parameters
         layer_config = {}
         for param_name, var in self.param_vars.items():
             try:
                 if isinstance(var, tk.BooleanVar):
+                    # Boolean parameters
                     layer_config[param_name] = var.get()
                 else:
                     value = var.get()
-                    # Try to convert to appropriate type
+                    # CRITICAL: Type conversion for numeric parameters
                     if value.replace('.', '').replace('-', '').isdigit():
                         if '.' in value:
                             layer_config[param_name] = float(value)
                         else:
                             layer_config[param_name] = int(value)
                     elif value.startswith('[') and value.endswith(']'):
-                        # Parse list
+                        # CRITICAL: Parse list parameters (e.g., kernel_size=[3,3])
                         layer_config[param_name] = eval(value)
                     else:
+                        # String parameters
                         layer_config[param_name] = value
             except:
+                # Fallback: use raw string value
                 layer_config[param_name] = var.get()
         
-        # Add layer to model
+        # CRITICAL: Create layer configuration dictionary
         layer_info = {
-            'id': self.layer_counter,
-            'type': actual_layer_name,
-            'config': layer_config
+            'id': self.layer_counter,           # Unique identifier
+            'layer_type': actual_layer_name,    # Layer class name
+            'config': layer_config              # Layer parameters
         }
         
+        # CRITICAL: Add layer to model configuration
         self.model_config['layers'].append(layer_info)
         self.layer_counter += 1
         
@@ -496,7 +639,7 @@ class SimpleModelBuilderGUI:
             
             self.layer_tree.insert('', 'end', values=(
                 i + 1,
-                layer['type'],
+                layer['layer_type'],
                 params_str,
                 output_shape
             ))
@@ -507,7 +650,7 @@ class SimpleModelBuilderGUI:
             return "N/A"
             
         layer = self.model_config['layers'][layer_index]
-        layer_type = layer['type']
+        layer_type = layer['layer_type']
         config = layer['config']
         
         # This is a simplified calculation
@@ -560,8 +703,29 @@ Model Size: {model_size_mb:.2f} MB
 Layer Breakdown:"""
             
             for i, layer in enumerate(self.model_config['layers']):
-                layer_params = sum(p.numel() for p in model.layers[i].parameters()) if hasattr(model, 'layers') else 0
-                stats_text += f"\n  {i+1}. {layer['type']}: {layer_params:,} params"
+                # Try to get layer parameters - the model structure may vary
+                try:
+                    if hasattr(model, 'layers') and i < len(model.layers):
+                        layer_params = sum(p.numel() for p in model.layers[i].parameters())
+                    else:
+                        # Fallback: estimate based on layer type
+                        layer_type = layer['layer_type']
+                        config = layer['config']
+                        if layer_type == 'Linear':
+                            in_features = config.get('in_features', 128)
+                            out_features = config.get('out_features', 64)
+                            layer_params = in_features * out_features + (out_features if config.get('bias', True) else 0)
+                        elif layer_type in ['Conv1d', 'ConvBlock1D']:
+                            in_channels = config.get('in_channels', 9)
+                            out_channels = config.get('out_channels', 32)
+                            kernel_size = config.get('kernel_size', 3)
+                            layer_params = in_channels * out_channels * kernel_size + (out_channels if config.get('bias', True) else 0)
+                        else:
+                            layer_params = 0
+                except:
+                    layer_params = 0
+                    
+                stats_text += f"\n  {i+1}. {layer['layer_type']}: {layer_params:,} params"
             
             self.stats_text.insert(1.0, stats_text)
             self.stats_text.config(state=tk.DISABLED)
@@ -584,29 +748,141 @@ Layer Breakdown:"""
         index = int(item['values'][0]) - 1
         layer = self.model_config['layers'][index]
         
-        # Set layer type
-        layer_type = layer['type']
-        for item in self.layer_type_combo['values']:
-            if layer_type in item:
-                self.layer_type_combo.set(item)
-                break
+        # Open parameter editing dialog
+        self.open_layer_edit_dialog(index, layer)
+    
+    def open_layer_edit_dialog(self, layer_index, layer):
+        """Open a dialog to edit layer parameters"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Edit {layer['layer_type']} Layer")
+        dialog.geometry("500x400")
+        dialog.resizable(True, True)
         
-        # Update parameters
-        self.on_layer_type_change()
+        # Make dialog modal
+        dialog.transient(self.root)
+        dialog.grab_set()
         
-        # Set parameter values
-        for param_name, value in layer['config'].items():
-            if param_name in self.param_vars:
-                if isinstance(self.param_vars[param_name], tk.BooleanVar):
-                    self.param_vars[param_name].set(bool(value))
-                else:
-                    self.param_vars[param_name].set(str(value))
+        # Center the dialog
+        dialog.geometry("+%d+%d" % (self.root.winfo_rootx() + 50, self.root.winfo_rooty() + 50))
         
-        # Remove the layer temporarily
-        self.model_config['layers'].pop(index)
-        self.update_layer_list()
-        self.update_code_output()
-        self.update_model_stats()
+        # Main frame
+        main_frame = ttk.Frame(dialog, padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Layer type (read-only)
+        ttk.Label(main_frame, text=f"Layer Type: {layer['layer_type']}", 
+                 style='Subtitle.TLabel').pack(anchor=tk.W, pady=(0, 15))
+        
+        # Parameters frame
+        params_frame = ttk.LabelFrame(main_frame, text="Parameters", padding=10)
+        params_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        
+        # Get layer parameters
+        params = self.get_layer_parameters(layer['layer_type'])
+        param_vars = {}
+        
+        # Create parameter widgets
+        for i, (param_name, param_info) in enumerate(params.items()):
+            param_frame = ttk.Frame(params_frame)
+            param_frame.pack(fill=tk.X, pady=2)
+            
+            # Parameter name and description
+            ttk.Label(param_frame, text=f"{param_name}:", 
+                     style='Subtitle.TLabel').pack(side=tk.LEFT, padx=(0, 10))
+            
+            if 'description' in param_info:
+                ttk.Label(param_frame, text=f"({param_info['description']})", 
+                         style='Info.TLabel').pack(side=tk.LEFT)
+            
+            # Input widget
+            input_frame = ttk.Frame(param_frame)
+            input_frame.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(10, 0))
+            
+            # Get current value
+            current_value = layer['config'].get(param_name, param_info['default'])
+            
+            if param_info['type'] == 'int':
+                var = tk.StringVar(value=str(current_value))
+                entry = ttk.Entry(input_frame, textvariable=var, width=15)
+                entry.pack(side=tk.LEFT)
+                param_vars[param_name] = var
+                
+            elif param_info['type'] == 'float':
+                var = tk.StringVar(value=str(current_value))
+                entry = ttk.Entry(input_frame, textvariable=var, width=15)
+                entry.pack(side=tk.LEFT)
+                param_vars[param_name] = var
+                
+            elif param_info['type'] == 'bool':
+                var = tk.BooleanVar(value=bool(current_value))
+                checkbox = ttk.Checkbutton(input_frame, variable=var)
+                checkbox.pack(side=tk.LEFT)
+                param_vars[param_name] = var
+                
+            elif param_info['type'] == 'choice':
+                var = tk.StringVar(value=str(current_value))
+                combo = ttk.Combobox(input_frame, textvariable=var, width=12)
+                combo['values'] = param_info['choices']
+                combo.pack(side=tk.LEFT)
+                param_vars[param_name] = var
+                
+            elif param_info['type'] == 'list':
+                var = tk.StringVar(value=str(current_value))
+                entry = ttk.Entry(input_frame, textvariable=var, width=20)
+                entry.pack(side=tk.LEFT)
+                ttk.Label(input_frame, text="(e.g., [1, 2, 3])", 
+                         style='Info.TLabel').pack(side=tk.LEFT, padx=(5, 0))
+                param_vars[param_name] = var
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        def save_changes():
+            try:
+                # Validate and get parameters
+                new_config = {}
+                for param_name, var in param_vars.items():
+                    if isinstance(var, tk.BooleanVar):
+                        new_config[param_name] = var.get()
+                    else:
+                        value = var.get().strip()
+                        if not value:
+                            continue
+                            
+                        # Try to convert to appropriate type
+                        if value.replace('.', '').replace('-', '').replace('e', '').replace('+', '').isdigit():
+                            if '.' in value or 'e' in value.lower():
+                                new_config[param_name] = float(value)
+                            else:
+                                new_config[param_name] = int(value)
+                        elif value.startswith('[') and value.endswith(']'):
+                            new_config[param_name] = eval(value)
+                        elif value.lower() in ['true', 'false']:
+                            new_config[param_name] = value.lower() == 'true'
+                        else:
+                            new_config[param_name] = value
+                
+                # Update the layer
+                self.model_config['layers'][layer_index]['config'] = new_config
+                
+                # Update displays
+                self.update_layer_list()
+                self.update_code_output()
+                self.update_model_stats()
+                
+                dialog.destroy()
+                messagebox.showinfo("Success", f"Updated {layer['layer_type']} layer parameters")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Invalid parameters: {str(e)}")
+        
+        def cancel_changes():
+            dialog.destroy()
+        
+        ttk.Button(button_frame, text="Save Changes", command=save_changes, 
+                  style='Success.TButton').pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(button_frame, text="Cancel", command=cancel_changes).pack(side=tk.LEFT)
     
     def remove_layer(self):
         """Remove the selected layer"""
@@ -721,7 +997,7 @@ class {self.model_config['name']}(nn.Module):
         
         # Add layers
         for i, layer in enumerate(self.model_config['layers']):
-            layer_type = layer['type']
+            layer_type = layer['layer_type']
             config = layer['config']
             
             # Generate layer initialization
@@ -738,7 +1014,7 @@ class {self.model_config['name']}(nn.Module):
 '''
         
         for i, layer in enumerate(self.model_config['layers']):
-            layer_type = layer['type']
+            layer_type = layer['layer_type']
             
             # Handle special cases
             if layer_type in ['ReLU', 'Sigmoid', 'Tanh', 'Softmax']:
