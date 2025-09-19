@@ -899,15 +899,21 @@ def run_iterative_cv(args, config, dataset, device):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             run_name = f"{run_name}_{timestamp}"
             
+            # Handle entity parameter - use None if null in config
+            entity = config['logging']['entity'] if config['logging']['entity'] is not None else None
+            
+            logger.info(f"Initializing W&B with project: {config['logging']['project']}, entity: {entity}")
+            
             wandb.init(
                 project=config['logging']['project'],
-                entity=config['logging']['entity'],
+                entity=entity,
                 name=run_name,
                 config=config,
                 tags=[args.protocol, "cross_validation", "color_coded_har"]
             )
             
-            logger.info(f"Initialized W&B run: {run_name}")
+            logger.info(f"Successfully initialized W&B run: {run_name}")
+            logger.info(f"W&B run URL: {wandb.run.url}")
             
         except ImportError:
             logger.warning("wandb not available, falling back to offline logging")
@@ -1230,7 +1236,7 @@ def generate_aggregated_results(results, args, config, dataset):
     
     overall_test_acc = None
     overall_test_f1 = None
-    if all_test_preds.size > 0:
+    if len(all_test_preds) > 0 and all_test_preds.size > 0:
         overall_test_acc = accuracy_score(all_test_targets, all_test_preds)
         overall_test_f1 = f1_score(all_test_targets, all_test_preds, average='macro')
     
@@ -1242,7 +1248,7 @@ def generate_aggregated_results(results, args, config, dataset):
         # Filter predictions and targets for this activity
         train_mask = all_train_targets == i
         val_mask = all_val_targets == i
-        test_mask = all_test_targets == i if all_test_preds.size > 0 else np.array([])
+        test_mask = all_test_targets == i if len(all_test_preds) > 0 and all_test_preds.size > 0 else np.array([])
         
         if np.sum(train_mask) > 0:
             per_activity_metrics[activity_name] = {
@@ -1256,7 +1262,7 @@ def generate_aggregated_results(results, args, config, dataset):
             per_activity_metrics[activity_name]['val_f1'] = f1_score(all_val_targets[val_mask], all_val_preds[val_mask], average='macro')
             per_activity_metrics[activity_name]['val_samples'] = np.sum(val_mask)
         
-        if all_test_preds.size > 0 and np.sum(test_mask) > 0:
+        if len(all_test_preds) > 0 and all_test_preds.size > 0 and np.sum(test_mask) > 0:
             per_activity_metrics[activity_name]['test_acc'] = accuracy_score(all_test_targets[test_mask], all_test_preds[test_mask])
             per_activity_metrics[activity_name]['test_f1'] = f1_score(all_test_targets[test_mask], all_test_preds[test_mask], average='macro')
             per_activity_metrics[activity_name]['test_samples'] = np.sum(test_mask)
@@ -1299,7 +1305,7 @@ def create_aggregated_plots(val_preds, val_targets, test_preds, test_targets, ac
     plt.close()
     
     # 2. Overall Confusion Matrix (Test) - if available
-    if test_preds.size > 0:
+    if len(test_preds) > 0 and test_preds.size > 0:
         plt.figure(figsize=(10, 8))
         cm_test = confusion_matrix(test_targets, test_preds)
         sns.heatmap(cm_test, annot=True, fmt='d', cmap='Blues', 
@@ -1388,6 +1394,21 @@ def log_aggregated_results(overall_train_acc, overall_train_f1, overall_val_acc,
                                    overall_test_acc, overall_test_f1, per_activity_metrics, fold_metrics,
                                    args, config)
 
+def convert_numpy_types(obj):
+    """Convert NumPy types to native Python types for JSON serialization."""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    else:
+        return obj
+
 def save_aggregated_results_to_file(overall_train_acc, overall_train_f1, overall_val_acc, overall_val_f1,
                                    overall_test_acc, overall_test_f1, per_activity_metrics, fold_metrics,
                                    args, config):
@@ -1418,6 +1439,9 @@ def save_aggregated_results_to_file(overall_train_acc, overall_train_f1, overall
     if overall_test_acc is not None:
         results_data['overall_results']['test_accuracy'] = float(overall_test_acc)
         results_data['overall_results']['test_f1'] = float(overall_test_f1)
+    
+    # Convert NumPy types to native Python types for JSON serialization
+    results_data = convert_numpy_types(results_data)
     
     # Save to file
     os.makedirs('artifacts/results', exist_ok=True)
@@ -1478,7 +1502,7 @@ def log_aggregated_to_wandb(overall_train_acc, overall_train_f1, overall_val_acc
             probs=None, y_true=val_targets, preds=val_preds, class_names=activity_names
         )})
         
-        if test_preds.size > 0:
+        if len(test_preds) > 0 and test_preds.size > 0:
             cm_test = confusion_matrix(test_targets, test_preds)
             wandb.log({"aggregated/confusion_matrix_test": wandb.plot.confusion_matrix(
                 probs=None, y_true=test_targets, preds=test_preds, class_names=activity_names
@@ -1488,7 +1512,7 @@ def log_aggregated_to_wandb(overall_train_acc, overall_train_f1, overall_val_acc
         val_report = classification_report(val_targets, val_preds, target_names=activity_names, output_dict=True)
         wandb.log({"aggregated/classification_report_val": val_report})
         
-        if test_preds.size > 0:
+        if len(test_preds) > 0 and test_preds.size > 0:
             test_report = classification_report(test_targets, test_preds, target_names=activity_names, output_dict=True)
             wandb.log({"aggregated/classification_report_test": test_report})
         
@@ -1822,8 +1846,8 @@ def run_single_fold(args, config, dataset, device, fold_id):
         except:
             pass
     
-    # Return results for this fold
-    return {
+    # Prepare results dictionary
+    fold_results = {
         'fold_id': fold_id,
         'run_name': run_name,
         'best_epoch': best_epoch,
@@ -1840,6 +1864,267 @@ def run_single_fold(args, config, dataset, device, fold_id):
         'val_targets': final_val_targets,
         **test_results
     }
+    
+    # Save individual fold/subject/holdout analysis
+    save_individual_run_analysis(fold_results, args, config, dataset, train_metrics, val_metrics, test_metrics)
+    
+    return fold_results
+
+def save_individual_run_analysis(fold_results, args, config, dataset, train_metrics, val_metrics, test_metrics=None):
+    """Save detailed analysis for individual fold/subject/holdout run."""
+    import json
+    from datetime import datetime
+    from sklearn.metrics import classification_report, confusion_matrix
+    
+    run_name = fold_results['run_name']
+    protocol = args.protocol
+    
+    # Create individual results directory
+    results_dir = Path(f"artifacts/individual_results/{protocol}")
+    results_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Get activity names
+    activity_names = [TARGET_ACTIVITIES[dataset.idx_to_activity[i]] for i in range(len(dataset.idx_to_activity))]
+    
+    # Extract predictions and targets
+    train_preds = fold_results['train_predictions']
+    train_targets = fold_results['train_targets'] 
+    val_preds = fold_results['val_predictions']
+    val_targets = fold_results['val_targets']
+    
+    # Compute comprehensive metrics
+    train_metrics_dict = train_metrics.compute()
+    val_metrics_dict = val_metrics.compute()
+    
+    # Create detailed results dictionary
+    detailed_results = {
+        'run_info': {
+            'run_name': run_name,
+            'protocol': protocol,
+            'fold_id': fold_results['fold_id'],
+            'timestamp': datetime.now().isoformat(),
+            'best_epoch': fold_results['best_epoch'],
+            'config': config
+        },
+        'performance_summary': {
+            'train': {
+                'loss': fold_results['final_train_loss'],
+                'accuracy': fold_results['final_train_acc'],
+                'f1_macro': fold_results['final_train_f1'],
+                'detailed_metrics': train_metrics_dict
+            },
+            'validation': {
+                'loss': fold_results['final_val_loss'],
+                'accuracy': fold_results['final_val_acc'], 
+                'f1_macro': fold_results['final_val_f1'],
+                'detailed_metrics': val_metrics_dict
+            }
+        },
+        'classification_reports': {
+            'train': classification_report(train_targets, train_preds, target_names=activity_names, output_dict=True),
+            'validation': classification_report(val_targets, val_preds, target_names=activity_names, output_dict=True)
+        },
+        'confusion_matrices': {
+            'train': confusion_matrix(train_targets, train_preds).tolist(),
+            'validation': confusion_matrix(val_targets, val_preds).tolist()
+        }
+    }
+    
+    # Add test results if available
+    if 'test_loss' in fold_results:
+        test_preds = fold_results['test_predictions']
+        test_targets = fold_results['test_targets']
+        test_metrics_dict = test_metrics.compute() if test_metrics else {}
+        
+        detailed_results['performance_summary']['test'] = {
+            'loss': fold_results['test_loss'],
+            'accuracy': fold_results['test_acc'],
+            'f1_macro': fold_results['test_f1'],
+            'detailed_metrics': test_metrics_dict
+        }
+        detailed_results['classification_reports']['test'] = classification_report(
+            test_targets, test_preds, target_names=activity_names, output_dict=True
+        )
+        detailed_results['confusion_matrices']['test'] = confusion_matrix(test_targets, test_preds).tolist()
+    
+    # Convert NumPy types for JSON serialization
+    detailed_results = convert_numpy_types(detailed_results)
+    
+    # Save detailed results JSON
+    results_file = results_dir / f"{run_name}_detailed_results.json"
+    with open(results_file, 'w') as f:
+        json.dump(detailed_results, f, indent=2)
+    
+    # Save confusion matrices as images
+    save_individual_confusion_matrices(fold_results, activity_names, results_dir)
+    
+    # Save predictions and targets for further analysis
+    save_predictions_and_targets(fold_results, results_dir)
+    
+    # Log individual run results to W&B if enabled
+    if args.wandb:
+        try:
+            import wandb
+            from sklearn.metrics import confusion_matrix
+            
+            logger.info(f"Logging individual run results to W&B for {run_name}")
+            
+            # Create proper W&B naming based on protocol
+            if protocol == "kfold":
+                wb_prefix = f"fold_{fold_results['fold_id'] + 1}"
+            elif protocol == "loso":
+                # Extract subject from run_name (e.g., "loso_subject_1" -> "subject_1")
+                wb_prefix = run_name.replace("loso_", "")
+            else:  # holdout
+                wb_prefix = f"holdout_{fold_results['fold_id'] + 1}"
+            
+            # Create W&B log dictionary for this individual run
+            individual_log = {
+                f'{wb_prefix}/final_train_loss': fold_results['final_train_loss'],
+                f'{wb_prefix}/final_train_acc': fold_results['final_train_acc'],
+                f'{wb_prefix}/final_train_f1': fold_results['final_train_f1'],
+                f'{wb_prefix}/final_val_loss': fold_results['final_val_loss'],
+                f'{wb_prefix}/final_val_acc': fold_results['final_val_acc'],
+                f'{wb_prefix}/final_val_f1': fold_results['final_val_f1'],
+                f'{wb_prefix}/best_epoch': fold_results['best_epoch'],
+                f'{wb_prefix}/best_val_loss': fold_results['best_val_loss'],
+            }
+            
+            # Add test results if available
+            if 'test_loss' in fold_results:
+                individual_log.update({
+                    f'{wb_prefix}/test_loss': fold_results['test_loss'],
+                    f'{wb_prefix}/test_acc': fold_results['test_acc'],
+                    f'{wb_prefix}/test_f1': fold_results['test_f1'],
+                })
+            
+            # Add detailed metrics
+            individual_log.update({
+                f'{wb_prefix}/train_accuracy_detailed': train_metrics_dict['accuracy'],
+                f'{wb_prefix}/train_f1_macro_detailed': train_metrics_dict['f1_macro'],
+                f'{wb_prefix}/train_f1_micro_detailed': train_metrics_dict['f1_micro'],
+                f'{wb_prefix}/train_precision_macro_detailed': train_metrics_dict['precision_macro'],
+                f'{wb_prefix}/train_recall_macro_detailed': train_metrics_dict['recall_macro'],
+                f'{wb_prefix}/val_accuracy_detailed': val_metrics_dict['accuracy'],
+                f'{wb_prefix}/val_f1_macro_detailed': val_metrics_dict['f1_macro'],
+                f'{wb_prefix}/val_f1_micro_detailed': val_metrics_dict['f1_micro'],
+                f'{wb_prefix}/val_precision_macro_detailed': val_metrics_dict['precision_macro'],
+                f'{wb_prefix}/val_recall_macro_detailed': val_metrics_dict['recall_macro'],
+            })
+            
+            # Add AUROC/AUPR if available
+            if val_metrics_dict.get('auroc_macro') is not None:
+                individual_log.update({
+                    f'{wb_prefix}/val_auroc_macro': val_metrics_dict['auroc_macro'],
+                    f'{wb_prefix}/val_aupr_macro': val_metrics_dict['aupr_macro'],
+                    f'{wb_prefix}/val_calibration_error': val_metrics_dict['calibration_error'],
+                })
+            
+            # Log confusion matrices as W&B tables
+            train_cm = confusion_matrix(train_targets, train_preds)
+            val_cm = confusion_matrix(val_targets, val_preds)
+            
+            # Create confusion matrix tables
+            train_cm_table = wandb.Table(
+                data=[[activity_names[i], activity_names[j], int(train_cm[i, j])] 
+                      for i in range(len(activity_names)) for j in range(len(activity_names))],
+                columns=['True_Label', 'Predicted_Label', 'Count']
+            )
+            
+            val_cm_table = wandb.Table(
+                data=[[activity_names[i], activity_names[j], int(val_cm[i, j])] 
+                      for i in range(len(activity_names)) for j in range(len(activity_names))],
+                columns=['True_Label', 'Predicted_Label', 'Count']
+            )
+            
+            individual_log.update({
+                f'{wb_prefix}/train_confusion_matrix': wandb.plot.scatter(train_cm_table, 'True_Label', 'Predicted_Label', 
+                                                                        title=f'Training Confusion Matrix - {wb_prefix}'),
+                f'{wb_prefix}/val_confusion_matrix': wandb.plot.scatter(val_cm_table, 'True_Label', 'Predicted_Label',
+                                                                      title=f'Validation Confusion Matrix - {wb_prefix}'),
+            })
+            
+            # Add test confusion matrix if available
+            if 'test_predictions' in fold_results:
+                test_cm = confusion_matrix(fold_results['test_targets'], fold_results['test_predictions'])
+                test_cm_table = wandb.Table(
+                    data=[[activity_names[i], activity_names[j], int(test_cm[i, j])] 
+                          for i in range(len(activity_names)) for j in range(len(activity_names))],
+                    columns=['True_Label', 'Predicted_Label', 'Count']
+                )
+                individual_log[f'{wb_prefix}/test_confusion_matrix'] = wandb.plot.scatter(
+                    test_cm_table, 'True_Label', 'Predicted_Label', 
+                    title=f'Test Confusion Matrix - {wb_prefix}'
+                )
+            
+            # Log all metrics for this individual run
+            wandb.log(individual_log)
+            
+            logger.info(f'W&B logged individual results for {run_name} with prefix {wb_prefix}')
+            logger.info(f'Logged {len(individual_log)} metrics to W&B')
+            
+        except Exception as e:
+            logger.warning(f'Failed to log individual results to W&B: {e}')
+    
+    logger.info(f"Individual analysis saved for {run_name}:")
+    logger.info(f"  - Results: {results_file}")
+    logger.info(f"  - Plots: {results_dir}/{run_name}_*.png")
+
+def save_individual_confusion_matrices(fold_results, activity_names, results_dir):
+    """Save confusion matrices for individual run."""
+    run_name = fold_results['run_name']
+    
+    # Train confusion matrix
+    train_cm = confusion_matrix(fold_results['train_targets'], fold_results['train_predictions'])
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(train_cm, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=activity_names, yticklabels=activity_names)
+    plt.title(f'Training Confusion Matrix - {run_name}')
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
+    plt.tight_layout()
+    plt.savefig(results_dir / f"{run_name}_train_confusion_matrix.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Validation confusion matrix
+    val_cm = confusion_matrix(fold_results['val_targets'], fold_results['val_predictions'])
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(val_cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=activity_names, yticklabels=activity_names)
+    plt.title(f'Validation Confusion Matrix - {run_name}')
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
+    plt.tight_layout()
+    plt.savefig(results_dir / f"{run_name}_val_confusion_matrix.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Test confusion matrix (if available)
+    if 'test_predictions' in fold_results:
+        test_cm = confusion_matrix(fold_results['test_targets'], fold_results['test_predictions'])
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(test_cm, annot=True, fmt='d', cmap='Blues',
+                    xticklabels=activity_names, yticklabels=activity_names)
+        plt.title(f'Test Confusion Matrix - {run_name}')
+        plt.xlabel('Predicted')
+        plt.ylabel('Actual')
+        plt.tight_layout()
+        plt.savefig(results_dir / f"{run_name}_test_confusion_matrix.png", dpi=300, bbox_inches='tight')
+        plt.close()
+
+def save_predictions_and_targets(fold_results, results_dir):
+    """Save raw predictions and targets for further analysis."""
+    run_name = fold_results['run_name']
+    
+    # Save as compressed numpy files
+    np.savez_compressed(
+        results_dir / f"{run_name}_predictions_targets.npz",
+        train_predictions=fold_results['train_predictions'],
+        train_targets=fold_results['train_targets'],
+        val_predictions=fold_results['val_predictions'],
+        val_targets=fold_results['val_targets'],
+        test_predictions=fold_results.get('test_predictions', np.array([])),
+        test_targets=fold_results.get('test_targets', np.array([]))
+    )
 
 def aggregate_results(results, protocol):
     """Aggregate results from all folds/subjects."""
@@ -1927,6 +2212,8 @@ def aggregate_results(results, protocol):
     
     summary_file = f"checkpoints/cv_summary_{protocol}.json"
     import json
+    # Convert NumPy types to native Python types for JSON serialization
+    summary = convert_numpy_types(summary)
     with open(summary_file, 'w') as f:
         json.dump(summary, f, indent=2)
     logger.info(f"Summary saved to: {summary_file}")
@@ -2256,18 +2543,51 @@ def main():
         # Log to wandb
         if args.wandb:
             try:
-                wandb.log({
+                # Get comprehensive metrics
+                train_metrics_dict = train_metrics.compute()
+                val_metrics_dict = val_metrics.compute()
+                
+                # Basic metrics
+                log_dict = {
                     'epoch': epoch,
                     'train_loss': train_loss,
-                    'train_acc': train_acc,
-                    'train_f1': train_f1,
                     'val_loss': val_loss,
-                    'val_acc': val_acc,
-                    'val_f1': val_f1,
-                    'learning_rate': current_lr
-                })
-            except:
-                pass
+                    'learning_rate': current_lr,
+                    
+                    # Training metrics
+                    'train_accuracy': train_metrics_dict['accuracy'],
+                    'train_f1_macro': train_metrics_dict['f1_macro'],
+                    'train_f1_micro': train_metrics_dict['f1_micro'],
+                    'train_f1_weighted': train_metrics_dict['f1_weighted'],
+                    'train_precision_macro': train_metrics_dict['precision_macro'],
+                    'train_recall_macro': train_metrics_dict['recall_macro'],
+                    'train_specificity': train_metrics_dict['specificity'],
+                    'train_cohen_kappa': train_metrics_dict['cohen_kappa'],
+                    'train_matthews_corr': train_metrics_dict['matthews_corr'],
+                    
+                    # Validation metrics
+                    'val_accuracy': val_metrics_dict['accuracy'],
+                    'val_f1_macro': val_metrics_dict['f1_macro'],
+                    'val_f1_micro': val_metrics_dict['f1_micro'],
+                    'val_f1_weighted': val_metrics_dict['f1_weighted'],
+                    'val_precision_macro': val_metrics_dict['precision_macro'],
+                    'val_recall_macro': val_metrics_dict['recall_macro'],
+                    'val_specificity': val_metrics_dict['specificity'],
+                    'val_cohen_kappa': val_metrics_dict['cohen_kappa'],
+                    'val_matthews_corr': val_metrics_dict['matthews_corr'],
+                }
+                
+                # Add AUROC/AUPR if available
+                if val_metrics_dict['auroc_macro'] is not None:
+                    log_dict.update({
+                        'val_auroc_macro': val_metrics_dict['auroc_macro'],
+                        'val_aupr_macro': val_metrics_dict['aupr_macro'],
+                        'val_calibration_error': val_metrics_dict['calibration_error'],
+                    })
+                
+                wandb.log(log_dict)
+            except Exception as e:
+                logger.warning(f"W&B logging failed: {e}")
         
         # Early stopping with epsilon-based improvement check
         improvement = best_val_loss - val_loss
