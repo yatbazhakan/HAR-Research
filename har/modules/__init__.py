@@ -10,6 +10,7 @@ from .gnn_blocks import *
 from .transformer_blocks import *
 from .attention_modules import *
 from .model_builders import *
+from .losses import *
 
 __all__ = [
     # CNN Blocks
@@ -37,5 +38,9 @@ __all__ = [
     
     # Model Builders
     'HARModelBuilder', 'create_har_model', 'create_model_from_config',
-    'get_model_config', 'MODEL_CONFIGS'
+    'get_model_config', 'MODEL_CONFIGS',
+    
+    # Loss Functions
+    'FocalLoss', 'WeightedFocalLoss', 'LabelSmoothingCrossEntropy',
+    'get_loss_function'
 ]

@@ -44,12 +44,16 @@ class TrainingConfigGUI:
     def reset_config(self):
         """Reset configuration to default values"""
         self.config = {
+            # Training script selection
+            "training_script": "train_baselines.py",
+            
             # Dataset settings
             "dataset": "",
             "shards_glob": "",
             "stats": "",
             "fold_json": "",
             "class_names": "",
+            "config_file": "",
             
             # Model settings
             "model": "cnn_tcn",
@@ -64,6 +68,21 @@ class TrainingConfigGUI:
             "kfold_splits": "5",
             "num_workers": "4",
             "amp": False,
+            
+            # Color coding specific settings
+            "protocol": "kfold",
+            "fold": "",
+            "subject": "",
+            "run_all": False,
+            "ignore_class0": False,
+            "hide_batch_progress": False,
+            "hide_class_distribution": False,
+            
+            # Color coding model settings
+            "conv_filters": "32",
+            "fc_dims": "512,256",
+            "dropout": "0.25",
+            "keep_full_height": False,
             
             # Logging settings
             "wandb": False,
@@ -96,6 +115,9 @@ class TrainingConfigGUI:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
+        # Training Script Selection
+        self.create_script_section(scrollable_frame)
+        
         # Dataset Configuration
         self.create_dataset_section(scrollable_frame)
         
@@ -107,6 +129,9 @@ class TrainingConfigGUI:
         
         # Cross-Validation Configuration
         self.create_cv_section(scrollable_frame)
+        
+        # Color Coding Configuration
+        self.create_color_coding_section(scrollable_frame)
         
         # Logging Configuration
         self.create_logging_section(scrollable_frame)
@@ -124,6 +149,108 @@ class TrainingConfigGUI:
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
+    def create_script_section(self, parent):
+        """Create training script selection section"""
+        script_frame = ttk.LabelFrame(parent, text="Training Script Selection", padding=10)
+        script_frame.pack(fill=tk.X, pady=5)
+        
+        # Training script selection
+        self.create_field(script_frame, "training_script", "Training Script", "train_baselines.py", 0,
+                         combobox_values=["train_baselines.py", "train_inertial_color_coded.py"])
+        
+        # Bind script change to update UI
+        self.training_script_var.trace('w', lambda *args: self.on_script_change())
+        
+    def on_script_change(self):
+        """Handle training script change"""
+        script = self.config["training_script"]
+        if script == "train_inertial_color_coded.py":
+            # Show color coding specific fields
+            self.show_color_coding_fields()
+        else:
+            # Hide color coding specific fields
+            self.hide_color_coding_fields()
+    
+    def on_model_change(self):
+        """Handle model change"""
+        model = self.config["model"]
+        if model in ["InertialColorCNN", "ECGColorCNN", "MultiModalColorCNN"]:
+            # Show color coding model fields
+            self.show_color_coding_model_fields()
+        else:
+            # Hide color coding model fields
+            self.hide_color_coding_model_fields()
+    
+    def show_color_coding_fields(self):
+        """Show color coding specific fields"""
+        # Show color coding configuration section
+        self.color_coding_frame.pack(fill=tk.X, pady=5)
+    
+    def hide_color_coding_fields(self):
+        """Hide color coding specific fields"""
+        # Hide color coding configuration section
+        self.color_coding_frame.pack_forget()
+    
+    def show_color_coding_model_fields(self):
+        """Show color coding model specific fields"""
+        for widget in self.color_coding_model_widgets:
+            widget.grid()
+    
+    def hide_color_coding_model_fields(self):
+        """Hide color coding model specific fields"""
+        for widget in self.color_coding_model_widgets:
+            widget.grid_remove()
+    
+    def create_color_coding_model_fields(self):
+        """Create color coding specific model fields"""
+        # Store widgets for show/hide functionality
+        self.color_coding_model_widgets = []
+        
+        # Conv filters
+        conv_filters_label = ttk.Label(self.model_frame, text="Conv Filters:")
+        conv_filters_label.grid(row=4, column=0, sticky=tk.W, padx=5, pady=2)
+        self.color_coding_model_widgets.append(conv_filters_label)
+        
+        self.conv_filters_var = tk.StringVar(value="32")
+        conv_filters_entry = ttk.Entry(self.model_frame, textvariable=self.conv_filters_var, width=20)
+        conv_filters_entry.grid(row=4, column=1, sticky=tk.W, padx=5, pady=2)
+        self.color_coding_model_widgets.append(conv_filters_entry)
+        self.conv_filters_var.trace('w', lambda *args: self.update_config("conv_filters", self.conv_filters_var.get()))
+        
+        # FC dimensions
+        fc_dims_label = ttk.Label(self.model_frame, text="FC Dimensions:")
+        fc_dims_label.grid(row=5, column=0, sticky=tk.W, padx=5, pady=2)
+        self.color_coding_model_widgets.append(fc_dims_label)
+        
+        self.fc_dims_var = tk.StringVar(value="512,256")
+        fc_dims_entry = ttk.Entry(self.model_frame, textvariable=self.fc_dims_var, width=20)
+        fc_dims_entry.grid(row=5, column=1, sticky=tk.W, padx=5, pady=2)
+        self.color_coding_model_widgets.append(fc_dims_entry)
+        self.fc_dims_var.trace('w', lambda *args: self.update_config("fc_dims", self.fc_dims_var.get()))
+        
+        # Dropout
+        dropout_label = ttk.Label(self.model_frame, text="Dropout:")
+        dropout_label.grid(row=6, column=0, sticky=tk.W, padx=5, pady=2)
+        self.color_coding_model_widgets.append(dropout_label)
+        
+        self.dropout_var = tk.StringVar(value="0.25")
+        dropout_entry = ttk.Entry(self.model_frame, textvariable=self.dropout_var, width=20)
+        dropout_entry.grid(row=6, column=1, sticky=tk.W, padx=5, pady=2)
+        self.color_coding_model_widgets.append(dropout_entry)
+        self.dropout_var.trace('w', lambda *args: self.update_config("dropout", self.dropout_var.get()))
+        
+        # Keep full height
+        self.keep_full_height_var = tk.BooleanVar(value=False)
+        keep_full_height_check = ttk.Checkbutton(self.model_frame, text="Keep Full Height", 
+                                               variable=self.keep_full_height_var)
+        keep_full_height_check.grid(row=7, column=0, columnspan=2, sticky=tk.W, padx=5, pady=2)
+        self.color_coding_model_widgets.append(keep_full_height_check)
+        self.keep_full_height_var.trace('w', lambda *args: self.update_config("keep_full_height", self.keep_full_height_var.get()))
+        
+        # Initially hide these fields
+        for widget in self.color_coding_model_widgets:
+            widget.grid_remove()
+        
     def create_dataset_section(self, parent):
         """Create dataset configuration section"""
         dataset_frame = ttk.LabelFrame(parent, text="Dataset Configuration", padding=10)
@@ -136,23 +263,28 @@ class TrainingConfigGUI:
         # Bind dataset change to auto-fill paths
         self.dataset_var.trace('w', lambda *args: self.on_dataset_change())
         
-        # Shards glob pattern
-        self.create_field(dataset_frame, "shards_glob", "Shards Glob Pattern", "", 1)
+        # Config file (for color coding)
+        self.create_field(dataset_frame, "config_file", "Config File", "", 1, file_type="json")
         ttk.Button(dataset_frame, text="Browse", 
-                  command=self.browse_shards).grid(row=1, column=2, padx=5)
+                  command=self.browse_config).grid(row=1, column=2, padx=5)
+        
+        # Shards glob pattern
+        self.create_field(dataset_frame, "shards_glob", "Shards Glob Pattern", "", 2)
+        ttk.Button(dataset_frame, text="Browse", 
+                  command=self.browse_shards).grid(row=2, column=2, padx=5)
         
         # Stats JSON path
-        self.create_field(dataset_frame, "stats", "Stats JSON Path", "", 2)
+        self.create_field(dataset_frame, "stats", "Stats JSON Path", "", 3)
         ttk.Button(dataset_frame, text="Browse", 
-                  command=self.browse_stats).grid(row=2, column=2, padx=5)
+                  command=self.browse_stats).grid(row=3, column=2, padx=5)
         
         # Fold JSON path
-        self.create_field(dataset_frame, "fold_json", "Fold JSON Path", "", 3)
+        self.create_field(dataset_frame, "fold_json", "Fold JSON Path", "", 4)
         ttk.Button(dataset_frame, text="Browse", 
-                  command=self.browse_folds).grid(row=3, column=2, padx=5)
+                  command=self.browse_folds).grid(row=4, column=2, padx=5)
         
         # Class names
-        self.create_field(dataset_frame, "class_names", "Class Names", "", 4)
+        self.create_field(dataset_frame, "class_names", "Class Names", "", 5)
         
         # Auto-scan button
         ttk.Button(dataset_frame, text="Auto-Scan Datasets", 
@@ -160,17 +292,24 @@ class TrainingConfigGUI:
         
     def create_model_section(self, parent):
         """Create model configuration section"""
-        model_frame = ttk.LabelFrame(parent, text="Model Configuration", padding=10)
-        model_frame.pack(fill=tk.X, pady=5)
+        self.model_frame = ttk.LabelFrame(parent, text="Model Configuration", padding=10)
+        self.model_frame.pack(fill=tk.X, pady=5)
         
-        # Model selection
-        self.create_field(model_frame, "model", "Model", "cnn_tcn", 0,
-                         combobox_values=["cnn_tcn", "cnn_bilstm"])
+        # Model selection (for baselines and color coding)
+        self.create_field(self.model_frame, "model", "Model", "cnn_tcn", 0,
+                         combobox_values=["cnn_tcn", "cnn_bilstm", "InertialColorCNN", "ECGColorCNN", "MultiModalColorCNN"])
+        
+        # Bind model change to update UI
+        self.model_var.trace('w', lambda *args: self.on_model_change())
         
         # Hyperparameters
-        self.create_field(model_frame, "epochs", "Epochs", "100", 1, "int")
-        self.create_field(model_frame, "batch_size", "Batch Size", "32", 2, "int")
-        self.create_field(model_frame, "lr", "Learning Rate", "0.001", 3, "float")
+        self.create_field(self.model_frame, "epochs", "Epochs", "100", 1, "int")
+        self.create_field(self.model_frame, "batch_size", "Batch Size", "32", 2, "int")
+        self.create_field(self.model_frame, "lr", "Learning Rate", "0.001", 3, "float")
+        
+        # Color coding specific model parameters
+        self.create_color_coding_model_fields()
+        
         # Note: dropout and weight_decay are not supported by train_baselines.py
         
     def create_training_section(self, parent):
@@ -198,6 +337,33 @@ class TrainingConfigGUI:
         
         # K-fold splits
         self.create_field(cv_frame, "kfold_splits", "K-Fold Splits", "5", 2, "int")
+        
+    def create_color_coding_section(self, parent):
+        """Create color coding specific configuration section"""
+        self.color_coding_frame = ttk.LabelFrame(parent, text="Color Coding Configuration", padding=10)
+        self.color_coding_frame.pack(fill=tk.X, pady=5)
+        
+        # Protocol selection
+        self.create_field(self.color_coding_frame, "protocol", "Protocol", "kfold", 0,
+                         combobox_values=["kfold", "loso", "holdout"])
+        
+        # Fold number (for kfold)
+        self.create_field(self.color_coding_frame, "fold", "Fold Number", "", 1, "int")
+        
+        # Subject number (for loso)
+        self.create_field(self.color_coding_frame, "subject", "Subject Number", "", 2, "int")
+        
+        # Run all flag
+        self.create_checkbox(self.color_coding_frame, "run_all", "Run All Folds/Subjects", 3)
+        
+        # Ignore class 0
+        self.create_checkbox(self.color_coding_frame, "ignore_class0", "Ignore Class 0", 4)
+        
+        # Hide batch progress
+        self.create_checkbox(self.color_coding_frame, "hide_batch_progress", "Hide Batch Progress", 5)
+        
+        # Hide class distribution
+        self.create_checkbox(self.color_coding_frame, "hide_class_distribution", "Hide Class Distribution", 6)
         
     def create_logging_section(self, parent):
         """Create logging configuration section"""
@@ -266,7 +432,7 @@ class TrainingConfigGUI:
         ttk.Button(tmux_frame, text="Debug Tmux", 
                   command=self.debug_tmux).pack(side=tk.LEFT, padx=5)
         
-    def create_field(self, parent, key, label, default, row, field_type="str", column_offset=0, combobox_values=None):
+    def create_field(self, parent, key, label, default, row, field_type="str", column_offset=0, combobox_values=None, file_type=None):
         """Create a labeled input field"""
         ttk.Label(parent, text=f"{label}:").grid(row=row, column=column_offset, sticky=tk.W, padx=5, pady=2)
         
@@ -313,6 +479,13 @@ class TrainingConfigGUI:
         if dataset_name:
             self.log_message(f"Dataset changed to: {dataset_name}")
             self.update_dataset_paths(dataset_name)
+            
+            # Auto-set config file for color coding
+            if dataset_name == "mhealth":
+                config_file = "configs/mhealth_color.json"
+                if Path(config_file).exists():
+                    self.config_file_var.set(config_file)
+                    self.log_message(f"Auto-set config file: {config_file}")
         
     def auto_scan_datasets(self):
         """Auto-scan for available datasets"""
@@ -424,69 +597,142 @@ class TrainingConfigGUI:
         )
         if filename:
             self.fold_json_var.set(filename)
+    
+    def browse_config(self):
+        """Browse for config JSON file"""
+        filename = filedialog.askopenfilename(
+            title="Select Config JSON file",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        if filename:
+            self.config_file_var.set(filename)
             
     def generate_command(self):
         """Generate training command"""
         try:
-            # Validate required fields
-            required_fields = ["shards_glob", "stats", "model", "epochs", "batch_size", "lr"]
-            missing_fields = [field for field in required_fields if not self.config.get(field)]
-            
-            if missing_fields:
-                self.log_message(f"ERROR: Missing required fields: {missing_fields}")
+            # Check if color coding model is selected
+            if self.config["model"] in ["InertialColorCNN", "ECGColorCNN", "MultiModalColorCNN"]:
+                # Route to color coding script
+                self._generate_color_coding_command()
+            elif self.config["training_script"] == "train_baselines.py":
+                self._generate_baselines_command()
+            elif self.config["training_script"] == "train_inertial_color_coded.py":
+                self._generate_color_coding_command()
+            else:
+                self.log_message(f"ERROR: Unknown training script: {self.config['training_script']}")
                 return
                 
-            # Build command
-            cmd_parts = ["python", "scripts/train_baselines.py"]
-            
-            # Add arguments (only those supported by train_baselines.py)
-            cmd_parts.extend(["--shards_glob", self.config["shards_glob"]])
-            cmd_parts.extend(["--stats", self.config["stats"]])
-            cmd_parts.extend(["--model", self.config["model"]])
-            cmd_parts.extend(["--epochs", self.config["epochs"]])
-            cmd_parts.extend(["--batch_size", self.config["batch_size"]])
-            cmd_parts.extend(["--lr", self.config["lr"]])
-            # Note: dropout and weight_decay are not supported by train_baselines.py
-            
-            # CV method
-            cmd_parts.extend(["--cv", self.config["cv"]])
-            if self.config["cv"] == "holdout":
-                cmd_parts.extend(["--holdout_test_ratio", self.config["holdout_ratio"]])
-                # Note: holdout_val_ratio is not configurable in GUI, uses default
-            elif self.config["cv"] == "kfold":
-                cmd_parts.extend(["--kfold_k", self.config["kfold_splits"]])
-                # Note: kfold_idx is not configurable in GUI, uses default
-            elif self.config["cv"] == "fold_json":
-                cmd_parts.extend(["--fold_json", self.config["fold_json"]])
-                
-            # Training settings
-            cmd_parts.extend(["--num_workers", self.config["num_workers"]])
-            if self.config["amp"]:
-                cmd_parts.append("--amp")
-                
-            # Logging settings
-            if self.config["wandb"]:
-                cmd_parts.append("--wandb")
-                cmd_parts.extend(["--wandb_project", self.config["wandb_project"]])
-                if self.config["wandb_run"]:
-                    cmd_parts.extend(["--wandb_run", self.config["wandb_run"]])
-                    
-            cmd_parts.extend(["--plot_dir", self.config["plot_dir"]])
-            
-            # Class names
-            if self.config["class_names"]:
-                cmd_parts.extend(["--class_names", self.config["class_names"]])
-                
-            # Display command
-            command = " ".join(cmd_parts)
-            self.log_message("Generated Command:")
-            self.log_message(command)
-            
-            # Store command for execution
-            self.current_command = cmd_parts
-            
         except Exception as e:
-            self.log_message(f"ERROR generating command: {str(e)}")
+            self.log_message(f"ERROR: {str(e)}")
+            return
+    
+    def _generate_baselines_command(self):
+        """Generate command for train_baselines.py"""
+        # Validate required fields
+        required_fields = ["shards_glob", "stats", "model", "epochs", "batch_size", "lr"]
+        missing_fields = [field for field in required_fields if not self.config.get(field)]
+        
+        if missing_fields:
+            self.log_message(f"ERROR: Missing required fields: {missing_fields}")
+            return
+            
+        # Build command
+        cmd_parts = ["python", "scripts/train_baselines.py"]
+        
+        # Add arguments (only those supported by train_baselines.py)
+        cmd_parts.extend(["--shards_glob", self.config["shards_glob"]])
+        cmd_parts.extend(["--stats", self.config["stats"]])
+        cmd_parts.extend(["--model", self.config["model"]])
+        cmd_parts.extend(["--epochs", self.config["epochs"]])
+        cmd_parts.extend(["--batch_size", self.config["batch_size"]])
+        cmd_parts.extend(["--lr", self.config["lr"]])
+        
+        # CV method
+        cmd_parts.extend(["--cv", self.config["cv"]])
+        if self.config["cv"] == "holdout":
+            cmd_parts.extend(["--holdout_test_ratio", self.config["holdout_ratio"]])
+        elif self.config["cv"] == "kfold":
+            cmd_parts.extend(["--kfold_k", self.config["kfold_splits"]])
+        elif self.config["cv"] == "fold_json":
+            cmd_parts.extend(["--fold_json", self.config["fold_json"]])
+            
+        # Training settings
+        cmd_parts.extend(["--num_workers", self.config["num_workers"]])
+        if self.config["amp"]:
+            cmd_parts.append("--amp")
+            
+        # Logging settings
+        if self.config["wandb"]:
+            cmd_parts.append("--wandb")
+            cmd_parts.extend(["--wandb_project", self.config["wandb_project"]])
+            if self.config["wandb_run"]:
+                cmd_parts.extend(["--wandb_run", self.config["wandb_run"]])
+                
+        cmd_parts.extend(["--plot_dir", self.config["plot_dir"]])
+        
+        # Class names
+        if self.config["class_names"]:
+            cmd_parts.extend(["--class_names", self.config["class_names"]])
+            
+        self.current_command = cmd_parts
+        self.log_message("Command generated successfully!")
+        self.log_message(f"Command: {' '.join(cmd_parts)}")
+    
+    def _generate_color_coding_command(self):
+        """Generate command for train_inertial_color_coded.py"""
+        # Validate required fields
+        required_fields = ["config_file"]
+        missing_fields = [field for field in required_fields if not self.config.get(field)]
+        
+        if missing_fields:
+            self.log_message(f"ERROR: Missing required fields: {missing_fields}")
+            return
+            
+        # Build command
+        cmd_parts = ["python", "scripts/train_inertial_color_coded.py"]
+        
+        # Config file (required)
+        cmd_parts.extend(["--config", self.config["config_file"]])
+        
+        # Model
+        cmd_parts.extend(["--model", self.config["model"]])
+        
+        # Protocol
+        cmd_parts.extend(["--protocol", self.config["protocol"]])
+        
+        # Fold or subject (if not running all)
+        if not self.config["run_all"]:
+            if self.config["protocol"] == "kfold" and self.config["fold"]:
+                cmd_parts.extend(["--fold", self.config["fold"]])
+            elif self.config["protocol"] == "loso" and self.config["subject"]:
+                cmd_parts.extend(["--subject", self.config["subject"]])
+        else:
+            cmd_parts.append("--run_all")
+            
+        # Color coding specific flags
+        if self.config["ignore_class0"]:
+            cmd_parts.append("--ignore_class0")
+        if self.config["hide_batch_progress"]:
+            cmd_parts.append("--hide_batch_progress")
+        if self.config["hide_class_distribution"]:
+            cmd_parts.append("--hide_class_distribution")
+            
+        # Model parameters
+        if self.config.get("keep_full_height"):
+            cmd_parts.append("--keep_full_height")
+            
+        # W&B logging
+        if self.config["wandb"]:
+            cmd_parts.append("--wandb")
+            
+        # Tmux
+        if self.config["use_tmux"]:
+            cmd_parts.append("--tmux")
+            
+        self.current_command = cmd_parts
+        self.log_message("Command generated successfully!")
+        self.log_message(f"Command: {' '.join(cmd_parts)}")
+    
             
     def run_experiment(self):
         """Run the training experiment"""
