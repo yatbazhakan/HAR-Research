@@ -47,7 +47,9 @@ class ExperimentConfigRunner:
     
     def determine_experiment_type(self) -> str:
         """Determine the type of experiment from the config."""
-        if 'har_experiment' in self.config:
+        if 'color_coding_har_experiment' in self.config:
+            return 'color_coding_har'
+        elif 'har_experiment' in self.config:
             return 'har'
         elif 'introspection' in self.config:
             return 'introspection'
@@ -86,6 +88,25 @@ class ExperimentConfigRunner:
         result = subprocess.run(cmd, cwd=str(REPO_ROOT))
         return result.returncode
     
+    def run_color_coding_har_experiment(self, is_sweep: bool = False, sweep_config_path: Optional[str] = None) -> int:
+        """Run color-coding HAR experiment or sweep."""
+        if is_sweep:
+            logger.warning("Color-coding sweeps not yet implemented")
+            return 1
+        
+        # Run single color-coding HAR experiment
+        cmd = [
+            sys.executable,
+            str(REPO_ROOT / "scripts" / "run_color_coding_experiment.py"),
+            str(self.config_path)
+        ]
+        
+        logger.info(f"Running command: {' '.join(cmd)}")
+        
+        # Run the command
+        result = subprocess.run(cmd, cwd=str(REPO_ROOT))
+        return result.returncode
+    
     def run_introspection_experiment(self, is_sweep: bool = False, sweep_config_path: Optional[str] = None) -> int:
         """Run introspection experiment or sweep."""
         # This would call your existing introspection scripts
@@ -110,7 +131,9 @@ class ExperimentConfigRunner:
         experiment_type = self.determine_experiment_type()
         logger.info(f"Running {experiment_type} experiment (sweep: {is_sweep})")
         
-        if experiment_type == 'har':
+        if experiment_type == 'color_coding_har':
+            return self.run_color_coding_har_experiment(is_sweep, sweep_config_path)
+        elif experiment_type == 'har':
             return self.run_har_experiment(is_sweep, sweep_config_path)
         elif experiment_type == 'introspection':
             return self.run_introspection_experiment(is_sweep, sweep_config_path)

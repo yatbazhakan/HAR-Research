@@ -92,6 +92,8 @@ class ConfigExperimentGUI:
                   command=self.load_har_example).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(examples_buttons, text="HAR Sweep", 
                   command=self.load_har_sweep_example).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(examples_buttons, text="Color Coding HAR", 
+                  command=self.load_color_coding_example).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(examples_buttons, text="View Configs", 
                   command=self.view_configs).pack(side=tk.LEFT)
         
@@ -187,6 +189,19 @@ class ConfigExperimentGUI:
             self.log_message(f"Loaded HAR sweep example: {example_config} + {sweep_config}")
         else:
             messagebox.showerror("Error", f"Example configs not found: {example_config} or {sweep_config}")
+    
+    def load_color_coding_example(self):
+        """Load color-coding HAR example configuration"""
+        example_config = REPO_ROOT / "configs" / "color_coding_har_experiment.yaml"
+        
+        if example_config.exists():
+            self.config_var.set(str(example_config))
+            self.use_sweep_var.set(False)
+            self.toggle_sweep_config()
+            self.generate_command()
+            self.log_message(f"Loaded color-coding HAR example: {example_config}")
+        else:
+            messagebox.showerror("Error", f"Color-coding config not found: {example_config}")
     
     def view_configs(self):
         """Open configs directory in file explorer"""

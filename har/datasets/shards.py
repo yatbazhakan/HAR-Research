@@ -37,3 +37,68 @@ class NPZShardsDataset(Dataset):
         if self.stats is not None:
             x = self.stats.apply(x)
         return x, y
+    
+    def get_dataset_statistics(self) -> dict:
+        """
+        Extract comprehensive dataset statistics for NPZ shards dataset.
+        
+        Returns:
+            dict: Dictionary containing:
+                - total_samples: Total number of samples
+                - num_subjects: Number of unique subjects (if available)
+                - num_activities: Number of unique activities
+                - activities_per_subject: Dictionary mapping subject_id to list of activities
+                - samples_per_subject: Dictionary mapping subject_id to sample count
+                - samples_per_activity: Dictionary mapping activity_id to sample count
+                - subject_activity_matrix: Dictionary showing activity distribution per subject
+        """
+        # Load all data to compute statistics
+        all_data = []
+        for i in range(len(self)):
+            x, y = self[i]
+            # Get subject_id from the shard if available
+            file_idx, sample_idx = self.index[i]
+            file_path = self._map[file_idx][0]
+            z = np.load(file_path, allow_pickle=False)
+            if "subject_id" in z.files:
+                subject_id = z["subject_id"][sample_idx]
+            else:
+                subject_id = f"file_{file_idx}"
+            all_data.append({"subject_id": subject_id, "activity": y})
+        
+        # Convert to DataFrame for easier analysis
+        import pandas as pd
+        df = pd.DataFrame(all_data)
+        
+        # Calculate statistics
+        stats = {
+            "total_samples": len(df),
+            "num_subjects": df["subject_id"].nunique(),
+            "num_activities": df["activity"].nunique(),
+            "unique_subjects": sorted(df["subject_id"].unique().tolist()),
+            "unique_activities": sorted(df["activity"].unique().tolist()),
+            "activities_per_subject": {},
+            "samples_per_subject": {},
+            "samples_per_activity": {},
+            "subject_activity_matrix": {}
+        }
+        
+        # Activities per subject
+        for subject in df["subject_id"].unique():
+            subject_data = df[df["subject_id"] == subject]
+            activities = sorted(subject_data["activity"].unique().tolist())
+            stats["activities_per_subject"][subject] = activities
+            stats["samples_per_subject"][subject] = len(subject_data)
+        
+        # Samples per activity
+        for activity in df["activity"].unique():
+            activity_data = df[df["activity"] == activity]
+            stats["samples_per_activity"][activity] = len(activity_data)
+        
+        # Subject-activity matrix
+        for subject in df["subject_id"].unique():
+            subject_data = df[df["subject_id"] == subject]
+            activity_counts = subject_data["activity"].value_counts().to_dict()
+            stats["subject_activity_matrix"][subject] = activity_counts
+        
+        return stats

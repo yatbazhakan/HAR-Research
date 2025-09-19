@@ -99,26 +99,101 @@ def _windowize_df(df: pd.DataFrame, fs: int, win_sec: float, overlap: float, sub
         }
         i += H
 
-def load_mhealth_stream(root_dir: str, fs: int = 50, win_sec: float = 3.0, overlap: float = 0.5) -> pd.DataFrame:
+def load_mhealth_raw_stream(root_dir: str, fs: int = 50, win_sec: float = 3.0, overlap: float = 0.5) -> pd.DataFrame:
     """
-    Reads all mHealth_subject*.log files, builds windows at fs (assumes ~50Hz logs; if not, acts as downsampler by stride)
+    Reads all mHealth_subject*.log files with ALL 23 channels for color coding.
     """
     root = Path(root_dir)
     files = sorted(list(root.glob("mHealth_subject*.log")))
     rows = []
     for p in files:
         subj = p.stem.split("subject")[-1]
-        df = _read_subject_file(p)
-        # If original fs != target, we do a simple stride-based resample assuming roughly uniform sampling
-        # (True timestamp isn't always provided consistently)
-        # Adjust stride to keep ~fs rate relative to ~50Hz common sampling
+        df = pd.read_csv(p, sep='\s+', header=None)
+        
+        # Use all 23 channels (columns 0-22, skip column 23 which is label)
+        X = df.iloc[:, :23].to_numpy(np.float32)  # (N, 23)
+        y = df.iloc[:, 23].astype(int).to_numpy()  # (N,) - column 24 (1-indexed) = column 23 (0-indexed)
+        
+        # Resample if needed
         approx_src = 50
         stride = max(1, int(round(approx_src / fs)))
         if stride > 1:
-            df = df.iloc[::stride].reset_index(drop=True)
-        for rec in _windowize_df(df, fs=fs, win_sec=win_sec, overlap=overlap, subj_id=subj):
-            rec.update({"dataset":"mhealth","split":"all"})
-            rows.append(rec)
+            X = X[::stride]
+            y = y[::stride]
+        
+        # Create windows
+        win_samples = int(win_sec * fs)
+        step_samples = int(win_samples * (1 - overlap))
+        
+        for i in range(0, len(X) - win_samples + 1, step_samples):
+            window_x = X[i:i + win_samples]  # (win_samples, 23)
+            window_y = y[i:i + win_samples]
+            
+            # Use majority vote for label
+            unique, counts = np.unique(window_y, return_counts=True)
+            label = unique[np.argmax(counts)]
+            
+            rows.append({
+                "x": window_x,
+                "y": label,
+                "subject_id": subj,
+                "start_idx": i,
+                "fs": fs,
+                "channels": [f"ch_{j}" for j in range(23)],
+                "dataset": "mhealth",
+                "split": "all"
+            })
+    
+    return pd.DataFrame(rows)
+
+
+
+
+def load_mhealth_stream(root_dir: str, fs: int = 50, win_sec: float = 3.0, overlap: float = 0.5) -> pd.DataFrame:
+    """
+    Reads all mHealth_subject*.log files, builds windows at fs with ALL 23 channels.
+    """
+    root = Path(root_dir)
+    files = sorted(list(root.glob("mHealth_subject*.log")))
+    rows = []
+    for p in files:
+        subj = p.stem.split("subject")[-1]
+        df = pd.read_csv(p, sep='\s+', header=None)
+        
+        # Use all 23 channels (columns 0-22, skip column 23 which is label)
+        X = df.iloc[:, :23].to_numpy(np.float32)  # (N, 23)
+        y = df.iloc[:, 23].astype(int).to_numpy()  # (N,) - column 24 (1-indexed) = column 23 (0-indexed)
+        
+        # Resample if needed
+        approx_src = 50
+        stride = max(1, int(round(approx_src / fs)))
+        if stride > 1:
+            X = X[::stride]
+            y = y[::stride]
+        
+        # Create windows
+        win_samples = int(win_sec * fs)
+        step_samples = int(win_samples * (1 - overlap))
+        
+        for i in range(0, len(X) - win_samples + 1, step_samples):
+            window_x = X[i:i + win_samples]  # (win_samples, 23)
+            window_y = y[i:i + win_samples]
+            
+            # Use majority vote for label
+            unique, counts = np.unique(window_y, return_counts=True)
+            label = unique[np.argmax(counts)]
+            
+            rows.append({
+                "x": window_x.T,  # (23, win_samples) - transpose to (C, T) format
+                "y": label,
+                "subject_id": subj,
+                "start_idx": i,
+                "fs": fs,
+                "channels": [f"ch_{j}" for j in range(23)],
+                "dataset": "mhealth",
+                "split": "all"
+            })
+    
     return pd.DataFrame(rows)
 
 
@@ -149,3 +224,67 @@ class MHealthDataset(Dataset):
         # NPZShardsDataset already applies normalization internally
         x, y = self.shards_dataset[idx]
         return x, y
+    
+    def get_dataset_statistics(self) -> dict:
+        """
+        Extract comprehensive dataset statistics for MHEALTH dataset.
+        
+        Returns:
+            dict: Dictionary containing:
+                - total_samples: Total number of samples
+                - num_subjects: Number of unique subjects
+                - num_activities: Number of unique activities
+                - activities_per_subject: Dictionary mapping subject_id to list of activities
+                - samples_per_subject: Dictionary mapping subject_id to sample count
+                - samples_per_activity: Dictionary mapping activity_id to sample count
+                - subject_activity_matrix: Dictionary showing activity distribution per subject
+        """
+        # Load all data to compute statistics
+        all_data = []
+        for i in range(len(self.shards_dataset)):
+            x, y = self.shards_dataset[i]
+            # Get subject_id from the shard if available
+            file_idx, sample_idx = self.shards_dataset.index[i]
+            file_path = self.shards_dataset._map[file_idx][0]
+            z = np.load(file_path, allow_pickle=False)
+            if "subject_id" in z.files:
+                subject_id = z["subject_id"][sample_idx]
+            else:
+                subject_id = f"unknown_{file_idx}"
+            all_data.append({"subject_id": subject_id, "activity": y})
+        
+        # Convert to DataFrame for easier analysis
+        df = pd.DataFrame(all_data)
+        
+        # Calculate statistics
+        stats = {
+            "total_samples": len(df),
+            "num_subjects": df["subject_id"].nunique(),
+            "num_activities": df["activity"].nunique(),
+            "unique_subjects": sorted(df["subject_id"].unique().tolist()),
+            "unique_activities": sorted(df["activity"].unique().tolist()),
+            "activities_per_subject": {},
+            "samples_per_subject": {},
+            "samples_per_activity": {},
+            "subject_activity_matrix": {}
+        }
+        
+        # Activities per subject
+        for subject in df["subject_id"].unique():
+            subject_data = df[df["subject_id"] == subject]
+            activities = sorted(subject_data["activity"].unique().tolist())
+            stats["activities_per_subject"][subject] = activities
+            stats["samples_per_subject"][subject] = len(subject_data)
+        
+        # Samples per activity
+        for activity in df["activity"].unique():
+            activity_data = df[df["activity"] == activity]
+            stats["samples_per_activity"][activity] = len(activity_data)
+        
+        # Subject-activity matrix
+        for subject in df["subject_id"].unique():
+            subject_data = df[df["subject_id"] == subject]
+            activity_counts = subject_data["activity"].value_counts().to_dict()
+            stats["subject_activity_matrix"][subject] = activity_counts
+        
+        return stats
